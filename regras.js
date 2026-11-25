@@ -130,14 +130,15 @@ window.REGRAS = {
   /* Modelos do assistente. Tudo pode ser mudado na tela.
      dias e pessoas: SEG, TER, QUA, QUI, SEX, SÁB, DOM.
      turnos: 1 = todos no mesmo horário; 2 = manhã e tarde (cada pessoa fica sempre no seu).
-     pausa: horário em que o negócio fecha no meio do dia (ou null). */
+     pausa: horário em que o negócio fecha no meio do dia (ou null).
+     horarios: dias com horário diferente do padrão, pelo número do dia (0 = SEG ... 6 = DOM). */
   modelos: {
     loja:        { nome: 'Loja',        atividade: 'comercio', turnos: 1, abre: '09:00', fecha: '18:00', pausa: null,
-                   dias: [1, 1, 1, 1, 1, 1, 0], pessoas: [2, 2, 2, 2, 2, 3, 0] },
+                   dias: [1, 1, 1, 1, 1, 1, 0], pessoas: [2, 2, 2, 2, 2, 3, 0], horarios: { 5: ['09:00', '13:00'] } },
     mercado:     { nome: 'Mercado',     atividade: 'comercio', turnos: 2, abre: '07:00', fecha: '21:00', pausa: null,
-                   dias: [1, 1, 1, 1, 1, 1, 1], pessoas: [3, 3, 3, 3, 3, 4, 4] },
+                   dias: [1, 1, 1, 1, 1, 1, 1], pessoas: [3, 3, 3, 3, 3, 4, 4], horarios: { 6: ['07:00', '13:00'] } },
     padaria:     { nome: 'Padaria',     atividade: 'comercio', turnos: 2, abre: '06:00', fecha: '20:00', pausa: null,
-                   dias: [1, 1, 1, 1, 1, 1, 1], pessoas: [3, 3, 3, 3, 3, 3, 3] },
+                   dias: [1, 1, 1, 1, 1, 1, 1], pessoas: [3, 3, 3, 3, 3, 3, 3], horarios: { 6: ['06:00', '12:00'] } },
     restaurante: { nome: 'Restaurante', atividade: 'comercio', turnos: 1, abre: '11:00', fecha: '23:00', pausa: ['15:00', '18:00'],
                    dias: [0, 1, 1, 1, 1, 1, 1], pessoas: [0, 3, 3, 3, 4, 4, 4] },
     outro:       { nome: 'Outro',       atividade: 'outras',   turnos: 1, abre: '08:00', fecha: '17:00', pausa: null,
@@ -145,5 +146,8 @@ window.REGRAS = {
   },
 
   /* Intervalo acima disto só com acordo escrito ou convenção (CLT art. 71). Só gera uma nota no assistente. */
-  intervaloMaximoSemAcordoMin: 120
+  intervaloMaximoSemAcordoMin: 120,
+
+  /* Conferência de digitação: salário fora desta faixa mostra "Confira o salário" e os custos esperam a correção. */
+  conferenciaSalario: { minimo: 1000, maximo: 50000 }
 };

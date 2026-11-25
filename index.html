@@ -114,12 +114,13 @@
       <div class="negocio-form" id="a-form">
         <div class="campos campos--3">
           <div class="campo">
-            <label for="a-abre">Abre às</label>
+            <label for="a-abre">Horário mais comum: abre às</label>
             <input id="a-abre" type="time" data-a="abre">
           </div>
           <div class="campo">
             <label for="a-fecha">Fecha às</label>
             <input id="a-fecha" type="time" data-a="fecha">
+            <button type="button" class="link" id="a-mesmo-horario">Mesmo horário todos os dias</button>
           </div>
           <fieldset class="campo campo--radio">
             <legend>Turnos</legend>
@@ -147,8 +148,8 @@
           <label class="chk"><input type="radio" name="a-ativ" value="comercio" data-a="atividade"> Comércio</label>
           <label class="chk"><input type="radio" name="a-ativ" value="outras" data-a="atividade"> Outras</label>
         </fieldset>
-        <p class="campo__rotulo">Dias abertos e pessoas necessárias em cada dia</p>
-        <div class="dias-equipe" id="a-dias"></div>
+        <p class="campo__rotulo">Dias abertos, horário de cada dia e pessoas necessárias</p>
+        <div class="dias-equipe dias-equipe--horario" id="a-dias"></div>
       </div>
 
       <div class="passo__acoes">
@@ -168,7 +169,8 @@
         </div>
         <div class="campo">
           <label for="a-salario">Salário médio (R$)</label>
-          <input id="a-salario" data-k="salario" inputmode="decimal" autocomplete="off">
+          <input id="a-salario" data-k="salario" inputmode="decimal" autocomplete="off" aria-describedby="a-salario-erro">
+          <p class="campo__erro" id="a-salario-erro"></p>
         </div>
       </div>
       <details class="nomes">
@@ -200,14 +202,20 @@
       <div id="a-pronta"></div>
       <div class="passo__acoes so-tela">
         <button type="button" class="btn btn--pri" data-imprimir="inicio"><svg class="ic"><use href="#i-imprimir"/></svg>Imprimir para o mural</button>
+        <a class="btn btn--sec" id="a-whatsapp" href="https://wa.me/" target="_blank" rel="noopener">Enviar no WhatsApp</a>
+        <button type="button" class="btn btn--sec" id="a-copiar">Copiar texto</button>
         <a class="btn btn--sec" href="#escala">Ajustar à mão</a>
         <button type="button" class="btn btn--sec" id="a-recomecar">Recomeçar</button>
       </div>
+      <p class="form__status so-tela" id="a-copiar-status" role="status"></p>
       <div class="passo__acoes so-tela">
         <button type="button" class="link" data-ir-passo="3">Voltar</button>
       </div>
     </div>
   </section>
+
+  <!-- RODÍZIO RECEBIDO POR LINK (só leitura) -->
+  <section class="painel" id="ver" hidden aria-labelledby="ver-titulo"></section>
 
   <!-- 1. QUANTO VALE A HORA -->
   <section class="painel" id="hora" role="tabpanel" aria-labelledby="tab-hora">
@@ -220,7 +228,7 @@
     <div class="campos campos--2">
       <div class="campo">
         <label for="h-salario">Salário mensal (R$)</label>
-        <input id="h-salario" data-k="salario" inputmode="decimal" autocomplete="off" placeholder="3.000,00">
+        <input id="h-salario" data-k="salario" inputmode="decimal" autocomplete="off" placeholder="3.000,00" aria-describedby="h-salario-erro">
         <p class="campo__erro" id="h-salario-erro"></p>
       </div>
       <div class="campo">

@@ -450,6 +450,30 @@ a.btn--pri { color: var(--creme); }
 .transicao { font-weight: 800; font-size: 17px; background: var(--amarelo); border: 2px solid var(--marinho); border-radius: var(--r-sm); padding: var(--s-3) var(--s-4); margin-bottom: var(--s-3); }
 .pergunta { display: grid; gap: var(--s-2); background: var(--amarelo-claro); border: 2px solid var(--amarelo-escuro); border-radius: var(--r-sm); padding: var(--s-3) var(--s-4); font-weight: 600; }
 
+/* passo 2: horário por dia */
+.dias-equipe--horario .dia-eq { flex-wrap: wrap; }
+.dia-eq__horario { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; order: 3; }
+.dia-eq__horario label { display: grid; gap: 2px; font-size: 13px; font-weight: 700; color: var(--marinho-2); }
+.dia-eq__horario input { min-height: 44px !important; font-size: 16px !important; padding: 0 6px !important; }
+@media (min-width: 640px) { .dia-eq__horario { order: 0; grid-template-columns: 1fr; } }
+@media (min-width: 1000px) { .dias-equipe--horario .dia-eq__horario input { font-size: 15px !important; padding: 0 4px !important; } }
+
+/* passo 3 e 4: faltas por dia e turno, recomendação */
+.faltas { list-style: disc; padding-left: 20px; margin-top: 4px; display: grid; gap: 2px; }
+#a-pronta > .so-tela { display: grid; gap: var(--s-4); }
+.recomendacao { font-size: 19px; font-weight: 700; background: var(--limao-claro); border: 2px solid var(--limao-escuro); border-radius: var(--r-sm); padding: var(--s-3) var(--s-4); }
+.outras { background: var(--papel); border: 2px solid var(--linha); border-radius: var(--r-mao); padding: 0 var(--s-4); }
+.outras > summary { cursor: pointer; min-height: 48px; display: flex; align-items: center; font-weight: 800; }
+.outras[open] { padding-bottom: var(--s-4); display: grid; gap: var(--s-4); }
+.legenda { font-size: 15px; font-weight: 600; color: var(--marinho-2); }
+.arraste { font-size: 14px; margin-bottom: calc(-1 * var(--s-2)); }
+.arraste::before { content: '↔ '; }
+@media (min-width: 1100px) { .arraste { display: none; } }
+.so-impressao { display: none; }
+.mural-impressao { display: grid; gap: var(--s-4); min-width: 0; }
+.mural-impressao > * { min-width: 0; }
+.grade-semana td { white-space: nowrap; }
+
 /* rodízio: feriado */
 .cal__fer { font-size: 12px; margin-left: 1px; vertical-align: top; }
 .cal__dia--feriado { outline: 2px dotted var(--marinho); outline-offset: -4px; }
@@ -504,6 +528,31 @@ a.btn--pri { color: var(--creme); }
   .mural .dom, .grade-semana .dom { border-left-width: 2px; }
   .grade-semana th[scope="row"], .mural th[scope="row"] { position: static; }
   .status .aviso { font-size: 10pt; }
+
+  /* Mural: só a escala da semana e o rodízio, numa página A4 deitada, letra de 11pt no mínimo */
+  body[data-imprimir="inicio"] .topo,
+  body[data-imprimir="inicio"] .rodape,
+  body[data-imprimir="inicio"] main > *:not(#inicio),
+  body[data-imprimir="inicio"] #inicio > *:not(.passo),
+  body[data-imprimir="inicio"] .passo[data-passo="4"] > *:not(#a-pronta),
+  body[data-imprimir="inicio"] #a-pronta > *:not(.mural-impressao),
+  body[data-imprimir="inicio"] .arraste { display: none !important; }
+  body[data-imprimir="inicio"] .so-impressao { display: block; }
+  body[data-imprimir="inicio"] .mural-impressao { gap: 6px; }
+  body[data-imprimir="inicio"] .mural-impressao__titulo { font-family: var(--titulo); font-size: 15pt; font-weight: 800; }
+  body[data-imprimir="inicio"] .mural-impressao h3 { font-size: 12pt; margin: 4px 0 0; }
+  body[data-imprimir="inicio"] .grade-semana { table-layout: fixed; }
+  body[data-imprimir="inicio"] .grade-semana th,
+  body[data-imprimir="inicio"] .grade-semana td { font-size: 11pt; padding: 2px 3px; line-height: 1.25; }
+  body[data-imprimir="inicio"] .grade-semana thead th:first-child,
+  body[data-imprimir="inicio"] .grade-semana th[scope="row"] { width: 120px; }
+  body[data-imprimir="inicio"] .grade-semana th small { display: inline; font-size: 11pt; font-weight: 600; margin-left: 4px; }
+  body[data-imprimir="inicio"] .mural th,
+  body[data-imprimir="inicio"] .mural td { font-size: 11pt; padding: 1px 0; line-height: 1.2; }
+  body[data-imprimir="inicio"] .mural thead th span { font-size: 11pt; }
+  body[data-imprimir="inicio"] .mural th[scope="row"],
+  body[data-imprimir="inicio"] .mural thead th:first-child { width: 120px; font-size: 11pt; }
+  body[data-imprimir="inicio"] .legenda { font-size: 11pt; color: #000; }
   .painel__intro, .chk--linha { display: none !important; }
 
   *, *::before, *::after { background: transparent !important; box-shadow: none !important; color: #000 !important; }

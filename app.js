@@ -36,14 +36,28 @@
   const mesNome = (mes, ano) => `${MESES[mes - 1]} de ${ano}`;
   const maiuscula = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+  /* Lê números como as pessoas escrevem: "3.000,00", "R$ 3000", "1600 reais", "1,600.00", "4 pessoas".
+     Fica só com algarismos e separadores; o último separador é o decimal quando há os dois. */
   function valor(s) {
     if (typeof s === 'number') return s;
-    s = String(s ?? '').replace(/[R$\s %]/g, '');
-    if (!s) return NaN;
-    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
-    else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+    s = String(s ?? '').replace(/[^\d,.\-]/g, '').replace(/^[.,]+|[.,]+$/g, '');
+    if (!/\d/.test(s)) return NaN;
+    const v = s.lastIndexOf(',');
+    const p = s.lastIndexOf('.');
+    if (v >= 0 && p >= 0) s = v > p ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+    else if (v >= 0) s = /^-?\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, '') : s.replace(',', '.');
+    else if (p >= 0 && /^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
     const n = Number(s);
     return Number.isFinite(n) ? n : NaN;
+  }
+
+  // Salário plausível? Fora da faixa de regras.js, mostra "Confira o salário" e os custos esperam.
+  function conferirSalario(s) {
+    const v = valor(s);
+    if (!Number.isFinite(v) || v <= 0) return { ok: false, vazio: true, v };
+    const C = R.conferenciaSalario;
+    if (v < C.minimo || v > C.maximo) return { ok: false, v, msg: `Confira o salário: ${moeda.format(v)} parece errado.` };
+    return { ok: true, v };
   }
   const inteiro = (s, min, max) => { const n = Math.round(valor(s)); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min; };
   const paraMin = (t) => {
@@ -270,6 +284,7 @@
     if (!ROTAS.includes(id)) id = 'inicio';
     estado.aba = id;
     const noAssist = id === 'inicio';
+    $('#ver').hidden = true;
     $('#abas').hidden = noAssist;
     $('#inicio').hidden = !noAssist;
     botoesAba.forEach((b) => {
@@ -296,7 +311,11 @@
       if (j != null) { ev.preventDefault(); abrirAba(botoesAba[j].dataset.aba, true); }
     });
   });
-  window.addEventListener('hashchange', () => { abrirAba(location.hash.slice(1)); window.scrollTo(0, 0); });
+  window.addEventListener('hashchange', () => {
+    if (location.hash.startsWith('#ver=')) mostrarVer(location.hash.slice(5));
+    else abrirAba(location.hash.slice(1));
+    window.scrollTo(0, 0);
+  });
 
   /* ---------- imprimir ---------- */
   document.addEventListener('click', (ev) => {
@@ -311,11 +330,14 @@
      1. QUANTO VALE A HORA
      ========================================================= */
   function calcularHora() {
-    const sal = valor(estado.salario);
+    const cs = conferirSalario(estado.salario);
+    const sal = cs.v;
     const x = valor(estado.horasExtras);
     const erro = $('#h-salario-erro');
-    const ok = Number.isFinite(sal) && sal > 0;
-    erro.textContent = estado.salario && !ok ? 'Escreva o salário só com números, por exemplo 3.000,00.' : '';
+    const ok = cs.ok;
+    erro.textContent = cs.msg || (estado.salario && cs.vazio ? 'Escreva o salário só com números, por exemplo 3.000,00.' : '');
+    $$('#a-salario-erro').forEach((e) => { e.textContent = erro.textContent; });
+    $('#a-salario').setAttribute('aria-invalid', String(!!erro.textContent));
     $('#h-salario').setAttribute('aria-invalid', String(!!erro.textContent));
     const qtd = Number.isFinite(x) && x > 0 ? x : 0;
     $('#h-col-x').textContent = `${horas(qtd * 60)} extras no mês (50%)`;
@@ -464,10 +486,12 @@
       r.dias.forEach((d) => {
         const li = $(`.dia[data-d="${d.i}"]`, art);
         li.classList.toggle('dia--folga', !!d.folga);
-        $('[data-out="horas"]', li).textContent = d.folga ? 'Folga' : d.vazio ? 'Sem horário' : `${horas(d.liq)} no dia${d.intv === 0 ? ', sem intervalo' : ''}`;
+        const bl = p.dias[d.i].blocos;
+        $('[data-out="horas"]', li).textContent = d.folga ? 'Folga' : d.vazio ? 'Sem horário'
+          : `${bl ? bl.map((b) => `${b[0]}–${b[1]}`).join(' e ') + ': ' : ''}${horas(d.liq)} no dia${d.intv === 0 ? ', sem intervalo' : ''}`;
         if (!d.folga && !d.vazio) cont[d.i]++;
       });
-      $('[data-out="total"]', art).innerHTML = `<strong>${horas(r.total)}</strong> na semana · ${r.folgas} ${r.folgas === 1 ? 'folga' : 'folgas'}${p.blocos ? `<br>Horário: ${p.blocos.map((b) => `${b[0]}–${b[1]}`).join(' e ')}` : ''}`;
+      $('[data-out="total"]', art).innerHTML = `<strong>${horas(r.total)}</strong> na semana · ${r.folgas} ${r.folgas === 1 ? 'folga' : 'folgas'}`;
       $('[data-out="avisos"]', art).innerHTML = r.avisos.length
         ? r.avisos.map((a) => aviso(a)).join('')
         : aviso(`Tudo certo pelas regras de ${fase.horasSemana}h.`, 'ok');
@@ -500,7 +524,7 @@
       const d = p.dias[Number(el.closest('.dia').dataset.d)];
       d[el.dataset.df] = el.type === 'checkbox' ? el.checked : el.value;
       if (el.dataset.df === 'folga') soltarDoRodizioAutomatico(p);
-      else p.blocos = null;
+      else d.blocos = null;
     } else return;
     salvar();
     calcularEscala();
@@ -518,13 +542,12 @@
       if (!confirm(`Tirar ${p.nome} da escala?`)) return;
       estado.pessoas.splice(pi, 1);
     } else if (pronto) {
-      p.blocos = null;
+      p.dias.forEach((d) => { if (!d.folga) d.blocos = null; });
       const t = turnosProntos()[Number(pronto.dataset.pronto)];
       p.dias.forEach((d) => { if (!d.folga) Object.assign(d, { ent: t.ent, sai: t.sai, int: t.int }); });
     } else if (copiar) {
-      p.blocos = null;
       const o = p.dias[Number(copiar.dataset.copiar)];
-      p.dias.forEach((d) => { if (!d.folga) Object.assign(d, { ent: o.ent, sai: o.sai, int: o.int }); });
+      p.dias.forEach((d) => { if (!d.folga) Object.assign(d, { ent: o.ent, sai: o.sai, int: o.int, blocos: o.blocos || null }); });
     } else return;
     salvar(); desenharEscala(); calcularTudo();
     const alvo = rm ? $('#e-add') : $(`.pessoa[data-p="${pi}"] ${pronto ? `[data-pronto="${pronto.dataset.pronto}"]` : `[data-copiar="${copiar.dataset.copiar}"]`}`);
@@ -760,34 +783,70 @@
   const horarioDoTurno = (t) => (t.blocos ? t.blocos.map((b) => `${b[0]}–${b[1]}`).join(' e ') : `${t.ent}–${t.sai}`);
   const textoIntervalo = (int) => (Number(int) ? `${horas(Number(int))} de intervalo` : 'sem intervalo');
 
-  // Horário de cada turno do negócio, dentro do limite diário da fase.
-  function turnosDoNegocio(neg, fase) {
+  // Estrutura dos turnos, decidida pelo horário mais comum: um turno, Manhã/Tarde ou Almoço/Jantar.
+  function estruturaDoNegocio(neg, fase) {
+    const pausa = intervaloDaPausa(neg, fase);
+    if (pausa) return pausa.int > R.intervaloMaximoSemAcordoMin && !neg.acordoIntervalo ? { tipo: 'dois', nomes: ['Almoço', 'Jantar'] } : { tipo: 'um' };
+    if (Number(neg.turnos) === 2) return { tipo: 'dois', nomes: ['Manhã', 'Tarde'] };
+    return { tipo: 'um' };
+  }
+
+  // Horário de cada turno num horário de funcionamento (abre/fecha), dentro do limite diário da fase.
+  function turnosDoNegocio(neg, fase, est = estruturaDoNegocio(neg, fase)) {
     const lim = fase.limiteDiaMin;
     const abre = paraMin(neg.abre) ?? 480;
     let fecha = paraMin(neg.fecha) ?? 1020;
     if (fecha <= abre) fecha += 1440;
     const span = fecha - abre;
-    // Dois turnos cheios que se sobrepõem: o primeiro começa na abertura, o segundo termina no fechamento.
-    const doisTurnos = (n1, n2) => {
+    if (est.tipo === 'dois') {
+      // Dois turnos cheios que se sobrepõem: o primeiro começa na abertura, o segundo termina no fechamento.
       const pres = Math.min(span, lim + 60);
       const int = intPara(pres);
       return [
-        montarTurno(n1, abre, abre + pres, int, lim, 'metade'),
-        montarTurno(n2, fecha - pres, fecha, int, lim, 'metade')
+        montarTurno(est.nomes[0], abre, abre + pres, int, lim, 'metade'),
+        montarTurno(est.nomes[1], fecha - pres, fecha, int, lim, 'metade')
       ];
-    };
+    }
     const pausa = intervaloDaPausa(neg, fase);
     if (pausa) {
-      if (pausa.int > R.intervaloMaximoSemAcordoMin && !neg.acordoIntervalo) return doisTurnos('Almoço', 'Jantar');
       // Com acordo (ou pausa curta): começa na abertura, para na pausa e volta na reabertura.
       const t = montarTurno('Integral', abre, Math.min(fecha, abre + pausa.int + lim), pausa.int, lim, 'cheio');
       if (Number(t.int) === pausa.int && paraMin(t.sai) > pausa.pf) t.blocos = [[t.ent, hhmm(pausa.pi)], [hhmm(pausa.pf), t.sai]];
       return [t];
     }
-    if (Number(neg.turnos) === 2) return doisTurnos('Manhã', 'Tarde');
     const int = intPara(span);
     if (span - int > lim) return [montarTurno('Integral', abre, abre + lim + 60, 60, lim, 'cheio')];
     return [montarTurno('Integral', abre, fecha, int, lim, 'cheio')];
+  }
+
+  // Horário de cada dia do assistente (o dia sem horário próprio usa o mais comum).
+  const horarioDia = (neg, i) => ({ abre: (neg.dias[i] && neg.dias[i].abre) || neg.abre, fecha: (neg.dias[i] && neg.dias[i].fecha) || neg.fecha });
+
+  /* Turnos de cada dia da semana: dia curto = jornada curta. Depois garante as 11h entre o fim de um dia
+     e o começo do seguinte no mesmo turno (inclusive de domingo para segunda), atrasando a entrada se preciso. */
+  function turnosDaSemana(neg, fase) {
+    const est = estruturaDoNegocio(neg, fase);
+    const base = turnosDoNegocio(neg, fase, est);
+    const lim = fase.limiteDiaMin;
+    const porDia = neg.dias.map((d, i) => (d.aberto ? turnosDoNegocio({ ...neg, ...horarioDia(neg, i) }, fase, est) : null));
+    for (let passada = 0; passada < 2; passada++) {
+      for (let j = 0; j < base.length; j++) {
+        for (let d = 0; d < 7; d++) {
+          const a = porDia[d] && porDia[d][j];
+          const e = (d + 1) % 7;
+          const b = porDia[e] && porDia[e][j];
+          if (!a || !b) continue;
+          let fimA = paraMin(a.sai);
+          if (fimA <= paraMin(a.ent)) fimA += 1440;
+          const fimB = paraMin(b.sai);
+          const inicio = teto15(fimA + R.descanso.entreJornadasMin - 1440);
+          if (paraMin(b.ent) < inicio && inicio < fimB) {
+            porDia[e][j] = montarTurno(b.nome, inicio, fimB, intPara(fimB - inicio), lim, b.divisao);
+          }
+        }
+      }
+    }
+    return { base, porDia };
   }
   // Com dois turnos sobrepostos, a necessidade do dia é dividida: o turno que abre fica com a metade arredondada para cima.
   const necessidadeDoTurno = (n, turno) => (!turno || turno.divisao !== 'metade' ? n : ['Manhã', 'Almoço'].includes(turno.nome) ? Math.ceil(n / 2) : Math.floor(n / 2));
@@ -869,11 +928,13 @@
   function gerarNegocio(neg, n, fase, P) {
     const aberto = neg.dias.map((d) => d.aberto);
     const need = neg.dias.map((d) => (d.aberto ? Math.max(0, Math.round(valor(d.pessoas) || 0)) : 0));
-    const turnos = turnosDoNegocio(neg, fase);
+    const semana = turnosDaSemana(neg, fase);
+    const turnos = semana.base;
+    const porDia = semana.porDia;
     const somaFalta = (f) => f.flat().reduce((s, x) => s + x, 0);
     if (turnos.length === 1) {
       const r = gerarCiclo(n, need, aberto, P);
-      return { turnos, grupos: [{ turno: turnos[0], ciclos: r.ciclos, falta: r.falta, need }] };
+      return { turnos, porDia, grupos: [{ turno: turnos[0], indice: 0, ciclos: r.ciclos, falta: r.falta, need }] };
     }
     const needM = need.map((x) => necessidadeDoTurno(x, turnos[0]));
     const needT = need.map((x) => necessidadeDoTurno(x, turnos[1]));
@@ -888,12 +949,12 @@
       const desvio = Math.abs(k - (n * totalM) / Math.max(1, totalM + totalT));
       if (!melhor || falta < melhor.falta || (falta === melhor.falta && desvio < melhor.desvio)) {
         melhor = { falta, desvio, grupos: [
-          { turno: turnos[0], ciclos: a.ciclos, falta: a.falta, need: needM },
-          { turno: turnos[1], ciclos: b.ciclos, falta: b.falta, need: needT }
+          { turno: turnos[0], indice: 0, ciclos: a.ciclos, falta: a.falta, need: needM },
+          { turno: turnos[1], indice: 1, ciclos: b.ciclos, falta: b.falta, need: needT }
         ] };
       }
     }
-    return { turnos, grupos: melhor.grupos };
+    return { turnos, porDia, grupos: melhor.grupos };
   }
 
   /* Ajusta o mês para bater o mínimo de folgas: primeiro troca uma folga de lugar dentro da semana
@@ -972,8 +1033,10 @@
         nome: (a.nomes[i] || '').trim() || `Pessoa ${i + 1}`,
         turno: r.turnos.length > 1 ? g.turno.nome : null,
         divisao: g.turno.divisao,
-        blocos: g.turno.blocos || null,
-        dias: DIAS.map((_, d) => ({ folga: ciclo[0][d], ent: g.turno.ent, sai: g.turno.sai, int: g.turno.int })),
+        dias: DIAS.map((_, d) => {
+          const t = (r.porDia[d] && r.porDia[d][g.indice]) || g.turno;
+          return { folga: ciclo[0][d], ent: t.ent, sai: t.sai, int: t.int, blocos: t.blocos || null };
+        }),
         ciclo,
         cicloInicio: inicio
       });
@@ -991,8 +1054,16 @@
     repararMes(a.ano, a.mes);
     const falta = faltaDoMes(a.ano, a.mes);
     if (falta.porSemana > 0) {
+      // Horas de cada pessoa-dia que falta: a média dos turnos que faltam (um domingo curto pesa menos).
+      let soma = 0, peso = 0;
+      falta.entradas.forEach((e) => {
+        const idx = Math.max(0, r.turnos.findIndex((t) => t.nome === e.g));
+        const t = (r.porDia[e.ds] && r.porDia[e.ds][idx]) || r.turnos[idx];
+        const w = e.precisa - e.tem;
+        soma += t.liq * w; peso += w;
+      });
       estado.refTurnos = String(falta.porSemana);
-      estado.refHoras = horas(r.turnos[0].liq);
+      estado.refHoras = horas(peso ? Math.round(soma / peso / 15) * 15 : r.turnos[0].liq);
     }
     salvar();
     preencherCampos();
@@ -1008,20 +1079,42 @@
     const precisa = (ds, g) => necessidadeDoTurno(necessidadeDia(ds), g ? { nome: g, divisao: divisao(g) } : null);
     const semanas = new Map();
     const dias = new Set();
+    const mapa = new Map();
     for (const iso of isos) {
       const ds = dsDe(iso);
       let f = 0;
       for (const g of grupos) {
         const t = estado.pessoas.filter((p) => (g ? p.turno === g : true) && trabalhaEm(p, iso)).length;
-        f += Math.max(0, precisa(ds, g) - t);
+        const pr = precisa(ds, g);
+        f += Math.max(0, pr - t);
+        anotarFalta(mapa, ds, g, pr, t);
       }
       if (f > 0) dias.add(ds);
       const k = segundaDe(iso);
       semanas.set(k, (semanas.get(k) || 0) + f);
     }
     const porSemana = Math.max(0, ...semanas.values());
-    return { porSemana, dias: [...dias].sort((x, y) => x - y) };
+    return { porSemana, dias: [...dias].sort((x, y) => x - y), itens: itensFalta(mapa, grupos), entradas: [...mapa.values()].filter((e) => e.curtas > 0) };
   }
+
+  /* Falta em linguagem de dono: por dia e turno, "Segunda à tarde: precisa de 1, tem 0".
+     Quando falta só em parte das semanas (por causa do rodízio de domingos), diz "em algumas semanas". */
+  const DIAS_TITULO = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+  const TURNO_FRASE = { 'Manhã': 'de manhã', 'Tarde': 'à tarde', 'Almoço': 'no almoço', 'Jantar': 'no jantar' };
+  function anotarFalta(mapa, ds, g, precisa, tem) {
+    const k = `${ds}|${g || ''}`;
+    const e = mapa.get(k) || { ds, g, precisa, tem: Infinity, curtas: 0, total: 0 };
+    e.total++;
+    e.tem = Math.min(e.tem, tem);
+    if (tem < precisa) e.curtas++;
+    mapa.set(k, e);
+  }
+  function itensFalta(mapa, grupos) {
+    return [...mapa.values()].filter((e) => e.curtas > 0)
+      .sort((a, b) => a.ds - b.ds || grupos.indexOf(a.g) - grupos.indexOf(b.g))
+      .map((e) => `${DIAS_TITULO[e.ds]}${e.g && TURNO_FRASE[e.g] ? ' ' + TURNO_FRASE[e.g] : ''}: precisa de ${e.precisa}, tem ${e.tem}${e.curtas < e.total ? ' em algumas semanas' : ''}`);
+  }
+  const htmlFaltas = (itens) => `<ul class="faltas">${itens.map((t) => `<li>${t}</li>`).join('')}</ul>`;
 
   /* =========================================================
      ASSISTENTE
@@ -1036,7 +1129,10 @@
       pausaFim: m.pausa ? m.pausa[1] : '18:00',
       acordoIntervalo: false,
       atividade: m.atividade,
-      dias: m.dias.map((x, i) => ({ aberto: !!x, pessoas: String(m.pessoas[i]) }))
+      dias: m.dias.map((x, i) => {
+        const h = (m.horarios && m.horarios[i]) || [m.abre, m.fecha];
+        return { aberto: !!x, pessoas: String(m.pessoas[i]), abre: h[0], fecha: h[1] };
+      })
     });
   }
 
@@ -1074,12 +1170,26 @@
     }
   }
   function desenharDiasAssist() {
-    $('#a-dias').innerHTML = estado.assist.dias.map((d, i) => `
+    const a = estado.assist;
+    $('#a-dias').innerHTML = a.dias.map((d, i) => {
+      const h = horarioDia(a, i);
+      const off = d.aberto ? '' : 'disabled';
+      return `
       <div class="dia-eq${d.aberto ? '' : ' dia-eq--fechado'}" data-i="${i}">
         <label class="chk"><input type="checkbox" data-ad="aberto" ${d.aberto ? 'checked' : ''}> ${DIAS[i]} abre</label>
-        <label class="dia-eq__qtd">Pessoas<input data-ad="pessoas" inputmode="numeric" value="${esc(d.pessoas)}" ${d.aberto ? '' : 'disabled'} aria-label="Pessoas necessárias em ${DIAS_NOME[i]}"></label>
-      </div>`).join('');
+        <div class="dia-eq__horario">
+          <label>Abre<input type="time" data-ad="abre" value="${esc(h.abre)}" ${off} aria-label="Abre às, ${DIAS_NOME[i]}"></label>
+          <label>Fecha<input type="time" data-ad="fecha" value="${esc(h.fecha)}" ${off} aria-label="Fecha às, ${DIAS_NOME[i]}"></label>
+        </div>
+        <label class="dia-eq__qtd">Pessoas<input data-ad="pessoas" inputmode="numeric" value="${esc(d.pessoas)}" ${off} aria-label="Pessoas necessárias em ${DIAS_NOME[i]}"></label>
+      </div>`;
+    }).join('');
   }
+  $('#a-mesmo-horario').addEventListener('click', () => {
+    const a = estado.assist;
+    a.dias.forEach((d) => { d.abre = a.abre; d.fecha = a.fecha; });
+    salvar(); desenharDiasAssist(); desenharEquipeAssist();
+  });
   $('#a-negocios').addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-neg]');
     if (!b) return;
@@ -1096,7 +1206,9 @@
     if (el.dataset.ad === 'aberto') {
       d.aberto = el.checked;
       box.classList.toggle('dia-eq--fechado', !d.aberto);
-      $('[data-ad="pessoas"]', box).disabled = !d.aberto;
+      $$('input:not([type="checkbox"])', box).forEach((x) => { x.disabled = !d.aberto; });
+    } else if (el.dataset.ad === 'abre' || el.dataset.ad === 'fecha') {
+      if (el.value) d[el.dataset.ad] = el.value;
     } else d.pessoas = el.value;
     salvar(); desenharEquipeAssist();
   });
@@ -1160,6 +1272,13 @@
     const r = gerarNegocio(a, n, fase, P);
     const porSemana = Array.from({ length: P }, (_, w) => r.grupos.reduce((s, g) => s + g.falta[w].reduce((x, y) => x + y, 0), 0));
     const dias = [...new Set(r.grupos.flatMap((g) => g.falta.flatMap((sem) => sem.map((f, d) => (f > 0 ? d : -1)))))].filter((d) => d >= 0).sort((x, y) => x - y);
+    const nomes = r.turnos.length > 1 ? r.turnos.map((t) => t.nome) : [null];
+    const mapa = new Map();
+    r.grupos.forEach((g) => {
+      const nome = r.turnos.length > 1 ? g.turno.nome : null;
+      for (let w = 0; w < P; w++) for (let d = 0; d < 7; d++) if (a.dias[d].aberto) anotarFalta(mapa, d, nome, g.need[d], g.need[d] - g.falta[w][d]);
+    });
+    const itens = itensFalta(mapa, nomes);
     // domingo: no rodízio, numa semana ruim só trabalham m − ⌈m/P⌉ das m pessoas de um turno
     let domingoCurto = false;
     const precisaDom = domAberto ? Math.max(0, Math.round(valor(a.dias[6].pessoas) || 0)) : 0;
@@ -1174,7 +1293,7 @@
       }
       if (r.grupos.some((g) => g.falta.some((sem) => sem[6] > 0))) domingoCurto = true;
     }
-    return { porSemana: Math.max(0, ...porSemana), dias, domingoCurto, turnos: r.turnos };
+    return { porSemana: Math.max(0, ...porSemana), dias, itens, domingoCurto, turnos: r.turnos };
   }
 
   function desenharEquipeAssist() {
@@ -1185,9 +1304,7 @@
     // A frase principal segue a escala gerada (a mesma do passo 4), não só a conta no papel.
     let principal = null;
     if (pv.porSemana > 0) {
-      principal = aviso(c.falta <= 0
-        ? `No papel a equipe dá conta, mas na escala real falta gente: ${textoFalta(pv)}`
-        : `Na escala real falta gente: ${textoFalta(pv)}`);
+      principal = aviso(`${c.falta <= 0 ? 'No papel a equipe dá conta, mas na escala real falta gente:' : 'Na escala real falta gente:'}${htmlFaltas(pv.itens)}`);
     }
     const extras = [];
     if (pv.domingoCurto) extras.push(aviso('No domingo pode faltar gente em algumas semanas por causa do rodízio obrigatório de domingos.'));
@@ -1252,7 +1369,7 @@
       checarMes(p, ano, mes).problemas.forEach((t) => problemas.push(`${esc(p.nome)}, ${MESES[mes - 1]}: ${t}`));
     });
     const falta = faltaDoMes(ano, mes);
-    const avisoFalta = falta.porSemana > 0 ? aviso(`${textoFalta(falta)} <a class="link" href="#reforco">Veja o custo do reforço.</a>`) : '';
+    const avisoFalta = falta.porSemana > 0 ? aviso(`Falta gente:${htmlFaltas(falta.itens)}`) : '';
     const notas = [];
     const t0 = (estado.gerado && estado.gerado.turnos) || [];
     t0.forEach((t) => {
@@ -1263,52 +1380,148 @@
       ? aviso('<strong>Escala conferida: nenhum problema.</strong>', 'ok')
       : `${avisoFalta}${problemas.map((t) => aviso(t)).join('')}`;
 
-    // escala da semana
+    // escala da semana (uma linha por horário; dois blocos quando o turno para no meio do dia)
     const cont = Array(7).fill(0);
     const linhas = estado.pessoas.map((p) => `<tr><th scope="row">${esc(p.nome)}${p.turno ? `<small>${esc(p.turno)}</small>` : ''}</th>${p.dias.map((d, i) => {
-      if (d.folga) return '<td class="folga">Folga</td>';
+      if (d.folga) return `<td class="folga${i === 6 ? ' dom' : ''}">Folga</td>`;
       cont[i]++;
-      return p.blocos ? `<td>${p.blocos.map((b) => `${b[0]}–${b[1]}`).join('<br>')}</td>` : `<td>${d.ent}<br>${d.sai}</td>`;
+      return `<td class="${i === 6 ? 'dom' : ''}">${d.blocos ? d.blocos.map((b) => `${b[0]}–${b[1]}`).join('<br>') : `${d.ent}–${d.sai}`}</td>`;
     }).join('')}</tr>`).join('');
+    const arraste = '<p class="dica arraste">Arraste para o lado para ver todos os dias</p>';
+    const legendaTurnos = t0.map((t) => `${t0.length > 1 ? t.nome + ': ' : ''}${horarioDoTurno(t)}, ${t.blocos ? '' : textoIntervalo(t.int) + ', '}${horas(t.liq)} no dia`).join(' · ');
     const semana = `
+      ${arraste}
       <div class="rolagem"><table class="grade-semana">
-        <caption>Escala da semana · ${t0.map((t) => `${t0.length > 1 ? t.nome + ' ' : ''}${horarioDoTurno(t)}, ${t.blocos ? '' : textoIntervalo(t.int) + ', '}${horas(t.liq)} no dia`).join(' · ')}</caption>
         <thead><tr><th scope="col">Pessoa</th>${DIAS.map((d, i) => `<th scope="col" class="${i === 6 ? 'dom' : ''}">${d}</th>`).join('')}</tr></thead>
         <tbody>${linhas}</tbody>
-        <tfoot><tr><th scope="row">Trabalham</th>${cont.map((n, i) => { const pr = necessidadeDia(i); return `<td class="${n < pr ? 'curto' : ''}">${n}${pr ? ` de ${pr}` : ''}</td>`; }).join('')}</tr></tfoot>
+        <tfoot class="so-tela"><tr><th scope="row">Trabalham</th>${cont.map((n, i) => { const pr = necessidadeDia(i); return `<td class="${n < pr ? 'curto' : ''}">${n}${pr ? ` de ${pr}` : ''}</td>`; }).join('')}</tr></tfoot>
       </table></div>
-      <p class="dica">A escala da semana mostra a primeira semana do rodízio. O domingo de folga gira entre as pessoas.</p>`;
+      <p class="legenda">Horário mais comum · ${legendaTurnos}. A tabela mostra a primeira semana; o domingo de folga gira entre as pessoas.</p>`;
 
     // rodízio do mês (mural)
     const isos = diasDoMes(ano, mes);
     const fers = isos.map((iso) => feriadoEm(iso));
+    const listaFer = isos.map((iso, i) => (fers[i] ? `${diaMesBR(iso)} ${fers[i]}` : null)).filter(Boolean);
     const mural = `
+      ${arraste}
       <div class="rolagem"><table class="mural">
-        <caption>Rodízio de ${mesNome(mes, ano)} · F = folga${fers.some(Boolean) ? ' · ★ = feriado' : ''}</caption>
         <thead><tr><th scope="col">Pessoa</th>${isos.map((iso, i) => `<th scope="col" class="${dsDe(iso) === 6 ? 'dom' : ''}${fers[i] ? ' fer' : ''}"><span>${DIAS_LETRA[dsDe(iso)]}</span>${i + 1}${fers[i] ? '★' : ''}</th>`).join('')}</tr></thead>
         <tbody>${estado.pessoas.map((p) => `<tr><th scope="row">${esc(p.nome)}</th>${isos.map((iso) => {
           const tr = trabalhaEm(p, iso);
           return `<td class="${tr ? '' : 'folga'}${dsDe(iso) === 6 ? ' dom' : ''}">${tr ? '' : 'F'}</td>`;
         }).join('')}</tr>`).join('')}</tbody>
       </table></div>
-      ${textoFeriados(ano, mes)}`;
+      <p class="legenda">F = folga · D = domingo${listaFer.length ? ` · ★ = feriado (${listaFer.join(', ')})` : ''}</p>`;
 
-    // custos
-    const sal = valor(estado.salario);
-    const hora = sal > 0 ? sal / fase.divisor : 0;
-    const custos = `
-      <h3>Custos</h3>
-      <dl class="numeros numeros--2">
-        <div><dt>Valor da hora (${fase.horasSemana}h)</dt><dd>${sal > 0 ? R$(hora) : '–'}</dd><dd class="numeros__conta">${sal > 0 ? `${R$(sal)} ÷ ${fase.divisor}` : 'escreva o salário médio no passo 3'}</dd></div>
-        <div><dt>Hora extra 50%</dt><dd>${sal > 0 ? R$(hora * (1 + R.horaExtra.adicional)) : '–'}</dd><dd class="numeros__conta">no máximo 2h extras por pessoa por dia</dd></div>
-      </dl>
-      ${falta.porSemana > 0 ? `<h3>Como cobrir o que falta</h3>${htmlReforco()}<p><a class="link" href="#reforco">Mudar os valores do reforço</a></p>` : ''}`;
+    // uma recomendação de custo; as outras opções ficam recolhidas
+    let custo = '';
+    if (falta.porSemana > 0) {
+      const rc = calcReforco();
+      custo = `
+        <h3>Como cobrir o que falta</h3>
+        ${rc.erro ? `<p class="vazio">${rc.erro}</p>` : `<p class="recomendacao">${rc.recomendacao}</p>
+        <details class="outras"><summary>Ver outras opções</summary>${htmlReforco()}<p><a class="link" href="#reforco">Mudar os valores do reforço</a></p></details>`}`;
+    }
 
+    const nomeNeg = a.negocio && R.modelos[a.negocio] ? R.modelos[a.negocio].nome : '';
     $('#a-pronta').innerHTML = `
-      <ul class="avisos status">${status}${notas.join('')}</ul>
-      <h3>Escala da semana</h3>${semana}
-      <h3>Rodízio de ${mesNome(mes, ano)}</h3>${textoTransicao(ano, mes)}${mural}
-      ${custos}`;
+      <ul class="avisos status so-tela">${status}${notas.join('')}</ul>
+      <section class="mural-impressao" aria-label="Escala para o mural">
+        <p class="so-impressao mural-impressao__titulo">Escala ${nomeNeg ? `· ${esc(nomeNeg)} ` : ''}· ${mesNome(mes, ano)} · regras de ${fase.horasSemana}h</p>
+        <h3>Escala da semana</h3>${semana}
+        <h3>Rodízio de ${mesNome(mes, ano)}</h3>
+        <div class="so-tela">${textoTransicao(ano, mes)}</div>
+        ${mural}
+      </section>
+      <div class="so-tela">${textoFeriados(ano, mes)}${custo}</div>`;
+    atualizarCompartilhar();
+  }
+
+  /* ---------- WhatsApp, copiar e link do rodízio ---------- */
+  const horaCurta = (t) => { const m = paraMin(t); if (m == null) return t; const h = Math.floor(m / 60), mm = m % 60; return mm ? `${h}h${pad(mm)}` : `${h}h`; };
+  const horarioCurto = (d) => (d.blocos ? d.blocos.map((b) => `${horaCurta(b[0])}–${horaCurta(b[1])}`).join(' e ') : `${horaCurta(d.ent)}–${horaCurta(d.sai)}`);
+
+  // Código curto do mês: ano-mês e, por pessoa, nome:turno:folgas (dias de folga como bits em base 36).
+  function codigoRodizio(ano, mes) {
+    const isos = diasDoMes(ano, mes);
+    const pessoas = estado.pessoas.map((p) => {
+      let m = 0;
+      isos.forEach((iso, i) => { if (!trabalhaEm(p, iso)) m += 2 ** i; });
+      return [encodeURIComponent(p.nome || 'Pessoa'), p.turno ? encodeURIComponent(p.turno) : '', m.toString(36)].join(':');
+    });
+    return `${ano}-${pad(mes)},${pessoas.join(',')}`;
+  }
+  const linkRodizio = (ano, mes) => `${location.origin}${location.pathname}#ver=${codigoRodizio(ano, mes)}`;
+
+  function textoWhatsApp() {
+    const a = estado.assist;
+    const linhas = estado.pessoas.map((p) => {
+      const grupos = new Map();
+      p.dias.forEach((d, i) => { if (!d.folga) { const k = horarioCurto(d); grupos.set(k, [...(grupos.get(k) || []), i]); } });
+      const ordem = [...grupos.entries()].sort((x, y) => y[1].length - x[1].length);
+      const principal = ordem.length ? ordem[0][0] : '';
+      const outros = ordem.slice(1).map(([k, ds]) => `${ds.map((i) => DIAS_CURTO[i]).join(', ')} ${k}`);
+      const folgas = p.dias.map((d, i) => (d.folga ? DIAS_CURTO[i] : null)).filter(Boolean);
+      const turno = p.turno ? `${p.turno.toLowerCase()} ` : '';
+      return `${p.nome} (${turno}${principal}${outros.length ? '; ' + outros.join('; ') : ''}): ${folgas.length ? `folga ${lista(folgas)}` : 'sem folga'}`;
+    });
+    return `*Escala da semana*\n${linhas.join('\n')}\n\nO domingo de folga gira entre as pessoas. Rodízio de ${mesNome(a.mes, a.ano)}: ${linkRodizio(a.ano, a.mes)}`;
+  }
+  function atualizarCompartilhar() {
+    $('#a-whatsapp').href = `https://wa.me/?text=${encodeURIComponent(textoWhatsApp())}`;
+  }
+  $('#a-copiar').addEventListener('click', async () => {
+    const texto = textoWhatsApp();
+    const st = $('#a-copiar-status');
+    try {
+      await navigator.clipboard.writeText(texto);
+      st.textContent = 'Texto copiado. Cole no WhatsApp ou onde quiser.';
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = texto; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand && document.execCommand('copy');
+      ta.remove();
+      st.textContent = ok ? 'Texto copiado. Cole no WhatsApp ou onde quiser.' : 'Não deu para copiar sozinho. Use o botão Enviar no WhatsApp.';
+    }
+  });
+
+  /* ---------- rodízio recebido por link (#ver=...): só leitura, não mexe nos dados de quem abre ---------- */
+  function mostrarVer(codigo) {
+    const sec = $('#ver');
+    let html;
+    try {
+      const [ym, ...ps] = codigo.split(',');
+      const [ano, mes] = ym.split('-').map(Number);
+      if (!ano || !mes || mes > 12) throw new Error('mês');
+      const isos = diasDoMes(ano, mes);
+      const pessoas = ps.filter(Boolean).map((s) => {
+        const [n, t, m] = s.split(':');
+        return { nome: decodeURIComponent(n), turno: t ? decodeURIComponent(t) : '', mask: parseInt(m || '0', 36) };
+      });
+      const fers = isos.map((iso) => feriadoEm(iso));
+      const listaFer = isos.map((iso, i) => (fers[i] ? `${diaMesBR(iso)} ${fers[i]}` : null)).filter(Boolean);
+      html = `
+        <h2 id="ver-titulo">Rodízio de ${mesNome(mes, ano)}</h2>
+        <p class="painel__intro">Escala recebida por link. F = folga.</p>
+        <p class="dica arraste">Arraste para o lado para ver todos os dias</p>
+        <div class="rolagem"><table class="mural">
+          <thead><tr><th scope="col">Pessoa</th>${isos.map((iso, i) => `<th scope="col" class="${dsDe(iso) === 6 ? 'dom' : ''}"><span>${DIAS_LETRA[dsDe(iso)]}</span>${i + 1}${fers[i] ? '★' : ''}</th>`).join('')}</tr></thead>
+          <tbody>${pessoas.map((p) => `<tr><th scope="row">${esc(p.nome)}${p.turno ? `<small>${esc(p.turno)}</small>` : ''}</th>${isos.map((iso, i) => {
+            const folga = Math.floor(p.mask / 2 ** i) % 2 === 1;
+            return `<td class="${folga ? 'folga' : ''}${dsDe(iso) === 6 ? ' dom' : ''}">${folga ? 'F' : ''}</td>`;
+          }).join('')}</tr>`).join('')}</tbody>
+        </table></div>
+        <p class="legenda">F = folga · D = domingo${listaFer.length ? ` · ★ = feriado (${listaFer.join(', ')})` : ''}</p>
+        <p><a class="btn btn--sec" href="#inicio">Abrir a calculadora</a></p>`;
+    } catch (e) {
+      html = '<h2 id="ver-titulo">Rodízio</h2><p class="vazio">Este link de rodízio está incompleto. Peça para enviarem de novo.</p><p><a class="btn btn--sec" href="#inicio">Abrir a calculadora</a></p>';
+    }
+    sec.innerHTML = html;
+    sec.hidden = false;
+    $('#abas').hidden = true;
+    $('#inicio').hidden = true;
+    FERRAMENTAS.forEach((x) => { $('#' + x).hidden = true; });
   }
 
   /* =========================================================
@@ -1362,15 +1575,17 @@
 
   /* Quatro formas de cobrir as pessoas-dia que faltam. A recomendação só escolhe entre as formas de contratar:
      chamar na folga é exceção e hora extra só estende jornada (até 2h por pessoa por dia). */
-  function htmlReforco() {
+  function calcReforco() {
     const fase = faseAtual();
     const pd = Math.max(0, valor(estado.refTurnos) || 0);
     const hDia = Math.max(0, lerHoras(estado.refHoras) || 0);
-    const sal = valor(estado.salario);
+    const cs = conferirSalario(estado.salario);
+    const sal = cs.v;
     const meio = valor(estado.refMeio);
     const enc = Math.max(0, valor(estado.refEnc) || 0);
-    if (!(sal > 0) || !(pd > 0) || !(hDia > 0)) {
-      return '<p class="vazio">Preencha as pessoas-dia, as horas de cada pessoa-dia e o salário da equipe para ver a comparação.</p>';
+    if (cs.msg) return { erro: `${cs.msg} Corrija o salário para ver os custos.` };
+    if (!cs.ok || !(pd > 0) || !(hDia > 0)) {
+      return { erro: 'Preencha as pessoas-dia, as horas de cada pessoa-dia e o salário da equipe para ver a comparação.' };
     }
     const semanas = R.equipe.semanasPorMes;
     const minDia = Math.round(hDia * 60);
@@ -1392,21 +1607,29 @@
     const limMin = R.horaExtra.limiteDiaMin;
     const pessoasExtra = Math.ceil(minDia / limMin);
 
-    const contratar = [{ id: 'hora', nome: 'Contratar reforço por hora', custo: custoHora }];
-    if (custoMeio != null) contratar.push({ id: 'meio', nome: 'Salário fixo de meio período', custo: custoMeio });
+    // As duas formas de contratar cobrem o buraco inteiro, então dá para comparar os custos.
+    const contratar = [{ id: 'hora', frase: 'contratar alguém por hora', custo: custoHora }];
+    if (custoMeio != null) contratar.push({ id: 'meio', frase: `contratar meio período (${pessoasMeio} ${pessoasMeio === 1 ? 'pessoa' : 'pessoas'})`, custo: custoMeio });
     contratar.sort((a, b) => a.custo - b.custo);
     const melhor = contratar[0];
-    const outro = contratar[1];
-    // As duas formas de contratar cobrem o buraco inteiro, então dá para comparar os custos.
-    const selo = (id) => (id === melhor.id && outro ? '<p class="opcao__selo">Melhor para contratar</p>' : '');
+    const recomendacao = `A saída mais barata é ${melhor.frase}: <strong>${R$(melhor.custo)} por mês</strong>.`;
+    return { fase, pd, minDia, minSemana, minMes, semanas, horaEquipe, horaRef, encTxt, meio, custoHora, custoMeio, pessoasMeio, custoExtra, custoFolga, limMin, pessoasExtra, melhor, outro: contratar[1], recomendacao };
+  }
 
-    const frase = `Como o buraco se repete toda semana, a saída permanente é contratar. ${melhor.nome} custa <strong>${R$(melhor.custo)}</strong> por mês${outro ? `, ${R$(outro.custo - melhor.custo)} a menos que ${outro.nome.charAt(0).toLowerCase() + outro.nome.slice(1)}` : ''}. Hora extra só serve para estender a jornada de quem já está trabalhando, e chamar alguém na folga é só para exceção.`;
+  /* Quatro formas de cobrir as pessoas-dia que faltam. A recomendação só escolhe entre as formas de contratar:
+     chamar na folga é exceção e hora extra só estende jornada (até 2h por pessoa por dia). */
+  function htmlReforco() {
+    const c = calcReforco();
+    if (c.erro) return `<p class="vazio">${c.erro}</p>`;
+    const { fase, pd, minDia, minSemana, minMes, semanas, horaEquipe, horaRef, encTxt, meio, custoHora, custoMeio, pessoasMeio, custoExtra, custoFolga, limMin, pessoasExtra, melhor, outro } = c;
+    const selo = (id) => (id === melhor.id && outro ? '<p class="opcao__selo">Melhor para contratar</p>' : '');
+    const frase = `${c.recomendacao} Como o buraco se repete toda semana, a saída permanente é contratar. Hora extra só serve para estender a jornada de quem já está trabalhando, e chamar alguém na folga é só para exceção.`;
 
     return `
       <p class="resultado__base">Buraco na escala: ${pessoasDia(pd)} de ${horas(minDia)} por semana = ${horas(minSemana)} por semana, ou ${horas(minMes)} por mês (${num(semanas, 2)} semanas). Valor da hora da equipe: ${R$(horaEquipe)} (${fase.horasSemana}h, divisor ${fase.divisor}).</p>
       <div class="comparar comparar--4">
         <div class="opcao${melhor.id === 'hora' && outro ? ' opcao--melhor' : ''}">
-          <h3>Contratar reforço por hora <span>(intermitente ou folguista)</span></h3>
+          <h3>Contratar reforço por hora <span>(alguém por hora, só nos dias que faltam)</span></h3>
           <p class="opcao__valor">${R$(custoHora)}<span> por mês</span></p>
           <p class="opcao__conta">${horas(minMes)} × ${R$(horaRef)}${encTxt}</p>
           ${selo('hora')}
@@ -1435,9 +1658,9 @@
       <ul class="avisos">${aviso('Hora extra e trabalho na folga também aumentam férias, 13º e o repouso da semana. Esse acréscimo não entra nesta conta: confira com seu contador.', 'info')}</ul>`;
   }
   function calcularReforco() {
-    const sal = valor(estado.salario);
+    const cs = conferirSalario(estado.salario);
     const fase = faseAtual();
-    const hEq = sal > 0 ? sal / fase.divisor : 0;
+    const hEq = cs.ok ? cs.v / fase.divisor : 0;
     $('#f-hora-ref').placeholder = hEq ? num(hEq) : '';
     $('#f-hora-ref-dica').textContent = hEq ? `Em branco, usa o valor da hora da equipe: ${R$(hEq)}.` : 'Em branco, usa o valor da hora da equipe.';
     $('#f-resultado').innerHTML = htmlReforco();
@@ -1461,8 +1684,9 @@
     }
 
     if (tipo === 'mensalista') {
-      const sal = valor(estado.salario);
-      if (!(sal > 0)) { out.innerHTML = '<p class="vazio">Escreva o salário mensal para ver o desconto.</p>'; return; }
+      const cs = conferirSalario(estado.salario);
+      const sal = cs.v;
+      if (!cs.ok) { out.innerHTML = `<p class="vazio">${cs.msg || 'Escreva o salário mensal para ver o desconto.'}</p>`; return; }
       const dia = sal / S.diasDoMesMensalista;
       const repouso = dia * S.repousoEmDias;
       const descDias = dia * faltas;
@@ -1523,6 +1747,7 @@
     desenharRodizio();
     calcularTudo();
     const rota = location.hash.slice(1);
+    if (rota.startsWith('ver=')) { mostrarVer(rota.slice(4)); return; }
     abrirAba(ROTAS.includes(rota) ? rota : estado.aba);
   }
   iniciar();
