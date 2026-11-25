@@ -1,25 +1,27 @@
 /*
   DADOS DAS PÁGINAS DE ACESSO — o único arquivo que você precisa mudar.
 
-  - Datas, nomes de arquivo, links e o número de suporte ficam aqui.
-  - Caminhos de arquivo são relativos à página de acesso (por isso começam com ../).
-  - Se um PDF ainda não estiver na pasta /arquivos/, o botão aparece como "Em breve".
-  - suporteWhatsApp: só números, com DDI e DDD (ex.: 5511999998888). Vazio = botão "Suporte em breve".
+  - Datas, nomes de arquivo, links e o e-mail de suporte ficam aqui.
+  - Arquivo pode ser um caminho na pasta /arquivos/ (começa com ../) ou um link do Google Drive
+    (o arquivo precisa estar compartilhado como "Qualquer pessoa com o link").
+  - Se um PDF da pasta /arquivos/ ainda não existir, o botão aparece como "Em breve".
+  - suporteEmail: vazio = botão "Suporte em breve".
 */
 window.ACESSO = {
   produto: 'Mapa Fácil da Escala 5x2',
   atualizadoEm: '25/11/2026',
   baseLegal: 'de acordo com a EC 141/2026, o Decreto 13.173/2026 e a Portaria MTE 2.041/2026',
 
-  suporteWhatsApp: '',
+  suporteEmail: 'planilhas@triux.com.br',
+  assuntoSuporte: 'Ajuda com o Mapa Fácil da Escala 5x2',
   mensagemSuporte: 'Olá! Comprei o Mapa Fácil da Escala 5x2 e preciso de ajuda.',
 
   calculadora: '../#inicio',
 
   arquivos: {
     guia: '../arquivos/mapa-facil-escala-5x2.pdf',
-    modelos: '../arquivos/modelos-de-escala.pdf',
-    kit: '../arquivos/kit-dezembro.pdf'
+    modelos: 'https://drive.google.com/file/d/1gzGJ7xClkACEZ8z_C0ZcWUTek28_MxIe/view?usp=sharing',
+    kit: 'https://drive.google.com/file/d/1CqkleGVpM6Km6jm-9Ph0n5pqbCbgwsGV/view?usp=sharing'
   },
 
   itens: {

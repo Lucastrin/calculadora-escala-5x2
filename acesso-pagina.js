@@ -7,6 +7,10 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const icone = (id) => `<svg class="ic" aria-hidden="true"><use href="#i-${id}"/></svg>`;
   const nomeArquivo = (url) => url.split('/').pop();
+  // Link do Google Drive: "Abrir" mostra no Drive, "Baixar" usa o link de download direto.
+  const idDrive = (url) => (/drive\.google\.com\/(?:file\/d\/|open\?id=)([\w-]+)/.exec(url) || [])[1];
+  const botoesAbrir = (abrir, baixar, nome) => `<a class="btn btn--pri" href="${esc(abrir)}" target="_blank" rel="noopener">Abrir</a>
+         <a class="btn btn--sec" href="${esc(baixar)}"${nome ? ` download="${esc(nome)}"` : ''}>Baixar</a>`;
 
   $('#selo').textContent = plano.nome;
   $('#atualizado').textContent = `Atualizado em ${A.atualizadoEm} · ${A.baseLegal}`;
@@ -15,8 +19,11 @@
   const cartoes = plano.itens.map((id) => {
     const it = A.itens[id];
     let botoes;
-    if (it.arquivo) {
-      const url = A.arquivos[it.arquivo];
+    const url = it.arquivo && A.arquivos[it.arquivo];
+    const drive = url && idDrive(url);
+    if (drive) {
+      botoes = `<div class="item__botoes">${botoesAbrir(`https://drive.google.com/file/d/${drive}/view`, `https://drive.google.com/uc?export=download&id=${drive}`)}</div>`;
+    } else if (url) {
       botoes = `<div class="item__botoes" data-pdf="${esc(url)}" data-nome="${esc(nomeArquivo(url))}">
         <span class="btn btn--pri btn--espera" aria-disabled="true">Verificando…</span></div>`;
     } else {
@@ -39,16 +46,17 @@
       existe = r.ok && !/text\/html/i.test(r.headers.get('content-type') || '');
     } catch (e) { existe = false; }
     caixa.innerHTML = existe
-      ? `<a class="btn btn--pri" href="${esc(url)}" target="_blank" rel="noopener">Abrir</a>
-         <a class="btn btn--sec" href="${esc(url)}" download="${esc(caixa.dataset.nome)}">Baixar</a>`
+      ? botoesAbrir(url, url, caixa.dataset.nome)
       : '<span class="btn btn--sec btn--espera" aria-disabled="true">Em breve</span>';
   });
 
-  // Suporte no WhatsApp
-  const num = String(A.suporteWhatsApp || '').replace(/\D/g, '');
+  // Suporte por e-mail
+  const email = String(A.suporteEmail || '').trim();
   const sup = $('#suporte');
-  if (num.length >= 12) {
-    sup.innerHTML = `<a class="btn btn--pri btn--largo" href="https://wa.me/${num}?text=${encodeURIComponent(A.mensagemSuporte)}" target="_blank" rel="noopener">Falar com o suporte no WhatsApp</a>`;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const href = `mailto:${email}?subject=${encodeURIComponent(A.assuntoSuporte)}&body=${encodeURIComponent(A.mensagemSuporte)}`;
+    sup.innerHTML = `<a class="btn btn--pri btn--largo" href="${esc(href)}">Falar com o suporte por e-mail</a>
+      <p class="suporte__email">${esc(email)}</p>`;
   } else {
     sup.innerHTML = '<span class="btn btn--sec btn--largo btn--espera" aria-disabled="true">Suporte em breve</span>';
   }
