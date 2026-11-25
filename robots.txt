@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /calculadora-escala-5x2/acesso-
+Disallow: /calculadora-escala-5x2/arquivos/
+Disallow: /acesso-
+Disallow: /arquivos/
