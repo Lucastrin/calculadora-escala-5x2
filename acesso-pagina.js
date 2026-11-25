@@ -28,7 +28,6 @@
       ${botoes}
     </li>`;
   });
-  if (plano.bonus) cartoes.push(`<li class="item item--discreto"><span class="item__ic">${icone('kit')}</span><div class="item__texto"><p>${esc(plano.bonus)}</p></div></li>`);
   $('#itens').innerHTML = cartoes.join('');
 
   // PDF ausente: botão "Em breve", desativado e sem link.

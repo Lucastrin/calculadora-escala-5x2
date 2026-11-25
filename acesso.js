@@ -53,8 +53,7 @@ window.ACESSO = {
   planos: {
     basico: {
       nome: 'Plano Básico',
-      itens: ['guia'],
-      bonus: 'Bônus do Plano Completo: calculadora, modelos de escala e Kit Dezembro'
+      itens: ['guia']
     },
     completo: {
       nome: 'Plano Completo',
