@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Calculadora de Escala e Horas: o mapa da escala 5x2 para pequenos negócios</title>
-<meta name="description" content="Calcule o valor da hora, monte a escala da semana e o rodízio do mês e veja se a sua equipe dá conta das novas regras de 42h e 40h.">
+<meta name="description" content="Monte a escala da semana e o rodízio do mês em 4 passos, já nas regras de 42h e 40h, e veja quanto custa a hora e o reforço.">
 <meta name="page-type" content="software">
 <meta name="site-kind" content="software">
 <meta name="theme-color" content="#FBF4E4">
 <meta property="og:title" content="Calculadora de Escala e Horas — Mapa Fácil da Escala 5x2">
-<meta property="og:description" content="Valor da hora, escala da semana, rodízio do mês, custo do reforço e desconto por falta, no celular.">
+<meta property="og:description" content="Escala da semana, rodízio do mês, valor da hora, custo do reforço e desconto por falta, no celular.">
 <meta property="og:type" content="website">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -33,10 +33,15 @@
     <symbol id="i-ok" viewBox="0 0 24 24"><path d="M12 3.4c4.8 0 8.6 3.8 8.5 8.7-.1 4.8-3.9 8.5-8.6 8.5-4.8-.1-8.5-3.9-8.4-8.7C3.6 7.1 7.3 3.4 12 3.4z"/><path d="M7.7 12.3c1 1 2 1.9 3 2.9 1.9-2.1 3.8-4.3 5.6-6.4"/></symbol>
     <symbol id="i-mais" viewBox="0 0 24 24"><path d="M12.1 5.2c-.1 4.6.1 9.1-.1 13.7M5.3 12.1c4.5-.2 9-.1 13.5.1"/></symbol>
     <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M6.4 6.3c3.8 3.9 7.6 7.7 11.3 11.5M17.6 6.2C13.8 10 10 13.8 6.3 17.7"/></symbol>
+    <symbol id="i-loja" viewBox="0 0 24 24"><path d="M3.6 9.2c.5-1.9 1.1-3.7 1.8-5.5 4.4-.2 8.8-.2 13.2 0 .7 1.8 1.3 3.6 1.8 5.5"/><path d="M3.6 9.2c.2 1.5 1.4 2.4 2.8 2.3 1.3-.1 2.2-1 2.4-2.2.3 1.3 1.4 2.2 2.9 2.2 1.5 0 2.6-.9 2.9-2.2.2 1.2 1.1 2.1 2.4 2.2 1.4.1 2.6-.8 2.8-2.3"/><path d="M5 11.8c-.1 2.9 0 5.8.1 8.6 4.6.2 9.2.2 13.8 0 .2-2.9.2-5.7.1-8.6"/><path d="M10 20.3c0-1.8-.1-3.6.1-5.3 1.3-.1 2.6-.1 3.8.1.1 1.7.1 3.5 0 5.2"/></symbol>
+    <symbol id="i-mercado" viewBox="0 0 24 24"><path d="M2.8 4.3c.9 0 1.8.1 2.7.1.8 3.5 1.6 7 2.5 10.5 3.6.1 7.3.1 10.9-.1.8-2.4 1.5-4.8 2.1-7.3-4.8-.2-9.6-.3-14.4-.3"/><path d="M9.6 19.4c-.8 0-1.4-.7-1.3-1.5.1-.7.7-1.3 1.4-1.2.8.1 1.3.7 1.3 1.5-.1.7-.7 1.2-1.4 1.2zM17.1 19.5c-.8 0-1.4-.7-1.3-1.5.1-.7.7-1.3 1.4-1.2.8.1 1.3.7 1.3 1.5-.1.7-.7 1.2-1.4 1.2z"/></symbol>
+    <symbol id="i-padaria" viewBox="0 0 24 24"><path d="M4.4 16.9C2.6 15.1 3 12 5.2 9.5c2.6-3 7.3-5.6 11.4-5.8 2.7-.1 4.2 1.4 3.6 4-.9 4-4.8 8.4-9.1 10.3-2.6 1.1-5.1 0-6.7-1.1z"/><path d="M8.4 10.6c.8.8 1.4 1.7 1.8 2.7M11.9 8.3c.8.8 1.4 1.7 1.8 2.7M15.3 6.4c.7.8 1.2 1.6 1.5 2.5"/></symbol>
+    <symbol id="i-restaurante" viewBox="0 0 24 24"><path d="M7.1 3.4c0 1.9-.1 3.9.1 5.8M4.6 3.6c-.2 2.1-.1 4.1.3 5.6.6 1.1 3.9 1.2 4.5 0 .4-1.6.4-3.6.2-5.6M7.2 9.9c-.1 3.6 0 7.2.1 10.8"/><path d="M17.4 20.7c-.1-5.9 0-11.8.1-17.3-2.5.9-3.9 3.6-3.9 7.3 0 1.3.6 2.3 2 2.6.6.1 1.2.1 1.8 0"/></symbol>
+    <symbol id="i-outro" viewBox="0 0 24 24"><path d="M4.5 8.4c5-.3 10-.3 15 0 .3 3.9.3 7.9 0 11.8-5 .3-10 .3-15 0-.3-3.9-.3-7.9 0-11.8z"/><path d="M9 8.3c-.1-1.4 0-2.7.2-4 1.9-.2 3.8-.2 5.6 0 .2 1.3.3 2.6.2 4M4.6 13.1c5 .9 9.9.9 14.8 0"/></symbol>
   </defs>
 </svg>
 
-<a class="skip-link" href="#conteudo">Pular para as ferramentas</a>
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
 
 <header class="topo">
   <div class="wrap topo__wrap">
@@ -47,20 +52,23 @@
     </div>
 
     <div class="fase" aria-live="polite">
-      <label class="fase__rotulo" for="data-ref">Calcular pelas regras do dia</label>
-      <div class="fase__linha">
+      <p class="fase__selo" id="fase-selo"></p>
+      <p class="fase__aviso" id="fase-aviso" hidden></p>
+      <button type="button" class="link" id="fase-abrir" aria-expanded="false" aria-controls="fase-painel">Mudar a data das regras</button>
+      <div class="fase__painel" id="fase-painel" hidden>
+        <label class="fase__rotulo" for="data-ref">Calcular pelas regras do dia</label>
         <input id="data-ref" type="date" min="2020-01-01" max="2035-12-31">
-        <p class="fase__selo" id="fase-selo"></p>
-      </div>
-      <div class="fase__atalhos" role="group" aria-label="Escolher a fase">
-        <button type="button" class="chip" data-ir-data="hoje">Hoje</button>
-        <button type="button" class="chip" data-ir-data="2026-12-16">42h, de 16/12/2026</button>
-        <button type="button" class="chip" data-ir-data="2027-12-16">40h, de 16/12/2027</button>
+        <div class="fase__atalhos" role="group" aria-label="Escolher a fase">
+          <button type="button" class="chip" data-ir-data="hoje">Hoje</button>
+          <button type="button" class="chip" data-ir-data="2026-12-16">42h, de 16/12/2026</button>
+          <button type="button" class="chip" data-ir-data="2027-12-16">40h, de 16/12/2027</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <nav class="abas wrap" aria-label="Ferramentas">
+  <nav class="abas wrap" aria-label="Ferramentas" id="abas">
+    <a class="link voltar-assist" href="#inicio">← Voltar ao assistente</a>
     <div class="abas__lista" role="tablist" aria-label="Ferramentas">
       <button type="button" role="tab" id="tab-hora" aria-controls="hora" data-aba="hora"><svg class="ic"><use href="#i-hora"/></svg><span>Quanto vale a hora</span></button>
       <button type="button" role="tab" id="tab-escala" aria-controls="escala" data-aba="escala"><svg class="ic"><use href="#i-escala"/></svg><span>Escala da semana</span></button>
@@ -73,6 +81,129 @@
 </header>
 
 <main id="conteudo" class="wrap" tabindex="-1">
+
+  <!-- ASSISTENTE -->
+  <section class="assist" id="inicio" aria-label="Assistente da escala">
+    <ol class="progresso" id="progresso" aria-label="Passos do assistente">
+      <li data-p="1"><span class="progresso__n">1</span><span class="progresso__t">O que muda</span></li>
+      <li data-p="2"><span class="progresso__n">2</span><span class="progresso__t">Seu negócio</span></li>
+      <li data-p="3"><span class="progresso__n">3</span><span class="progresso__t">Sua equipe</span></li>
+      <li data-p="4"><span class="progresso__n">4</span><span class="progresso__t">Sua escala pronta</span></li>
+    </ol>
+
+    <!-- Passo 1 -->
+    <div class="passo" data-passo="1">
+      <h2>O que muda</h2>
+      <ul class="cartoes">
+        <li class="cartao"><span class="cartao__data">16/12/2026</span><p>A semana passa a ter <strong>até 42 horas</strong>, com <strong>2 folgas por semana</strong>.</p></li>
+        <li class="cartao"><span class="cartao__data">16/12/2027</span><p>A semana passa a ter <strong>até 40 horas</strong>.</p></li>
+        <li class="cartao"><span class="cartao__data">Sempre</span><p>O <strong>salário não pode diminuir</strong> porque a jornada ficou menor.</p></li>
+      </ul>
+      <div class="passo__acoes">
+        <button type="button" class="btn btn--pri" data-ir-passo="2">Montar minha escala</button>
+        <a class="link" href="#hora">Ver todas as ferramentas</a>
+      </div>
+    </div>
+
+    <!-- Passo 2 -->
+    <div class="passo" data-passo="2">
+      <h2>Seu negócio</h2>
+      <p class="painel__intro">Toque no tipo de negócio. Os dias, o horário e as pessoas já vêm preenchidos, e você muda o que quiser.</p>
+      <div class="negocios" role="group" aria-label="Tipo de negócio" id="a-negocios"></div>
+
+      <div class="negocio-form" id="a-form">
+        <div class="campos campos--3">
+          <div class="campo">
+            <label for="a-abre">Abre às</label>
+            <input id="a-abre" type="time" data-a="abre">
+          </div>
+          <div class="campo">
+            <label for="a-fecha">Fecha às</label>
+            <input id="a-fecha" type="time" data-a="fecha">
+          </div>
+          <fieldset class="campo campo--radio">
+            <legend>Turnos</legend>
+            <label class="chk"><input type="radio" name="a-turnos" value="1" data-a="turnos"> Um turno</label>
+            <label class="chk"><input type="radio" name="a-turnos" value="2" data-a="turnos"> Manhã e tarde</label>
+          </fieldset>
+        </div>
+        <label class="chk chk--linha"><input type="checkbox" data-a="pausa"> Fecha no meio do dia</label>
+        <div class="campos campos--3" id="a-pausa-campos">
+          <div class="campo">
+            <label for="a-pausa-ini">Fecha às</label>
+            <input id="a-pausa-ini" type="time" data-a="pausaIni">
+          </div>
+          <div class="campo">
+            <label for="a-pausa-fim">Reabre às</label>
+            <input id="a-pausa-fim" type="time" data-a="pausaFim">
+          </div>
+        </div>
+        <fieldset class="campo campo--radio campo--largo">
+          <legend>Atividade</legend>
+          <label class="chk"><input type="radio" name="a-ativ" value="comercio" data-a="atividade"> Comércio</label>
+          <label class="chk"><input type="radio" name="a-ativ" value="outras" data-a="atividade"> Outras</label>
+        </fieldset>
+        <p class="campo__rotulo">Dias abertos e pessoas necessárias em cada dia</p>
+        <div class="dias-equipe" id="a-dias"></div>
+      </div>
+
+      <div class="passo__acoes">
+        <button type="button" class="btn btn--sec" data-ir-passo="1">Voltar</button>
+        <button type="button" class="btn btn--pri" data-ir-passo="3" id="a-p2-seguir">Continuar</button>
+      </div>
+    </div>
+
+    <!-- Passo 3 -->
+    <div class="passo" data-passo="3">
+      <h2>Sua equipe</h2>
+      <div class="campos campos--2">
+        <div class="campo">
+          <label for="a-func">Quantos funcionários entram na escala</label>
+          <input id="a-func" data-a="func" inputmode="numeric" autocomplete="off">
+          <p class="campo__erro" id="a-func-erro"></p>
+        </div>
+        <div class="campo">
+          <label for="a-salario">Salário médio (R$)</label>
+          <input id="a-salario" data-k="salario" inputmode="decimal" autocomplete="off">
+        </div>
+      </div>
+      <details class="nomes">
+        <summary>Escrever os nomes (opcional)</summary>
+        <div class="nomes__lista" id="a-nomes"></div>
+      </details>
+      <div class="resultado" id="a-equipe"></div>
+      <div class="passo__acoes">
+        <button type="button" class="btn btn--sec" data-ir-passo="2">Voltar</button>
+        <button type="button" class="btn btn--pri" id="a-gerar">Gerar minha escala</button>
+      </div>
+    </div>
+
+    <!-- Passo 4 -->
+    <div class="passo" data-passo="4">
+      <div class="painel__topo">
+        <h2>Sua escala pronta</h2>
+      </div>
+      <div class="campos campos--3 so-tela">
+        <div class="campo">
+          <label for="a-mes">Mês do rodízio</label>
+          <select id="a-mes" data-a="mes"></select>
+        </div>
+        <div class="campo">
+          <label for="a-ano">Ano</label>
+          <select id="a-ano" data-a="ano"></select>
+        </div>
+      </div>
+      <div id="a-pronta"></div>
+      <div class="passo__acoes so-tela">
+        <button type="button" class="btn btn--pri" data-imprimir="inicio"><svg class="ic"><use href="#i-imprimir"/></svg>Imprimir para o mural</button>
+        <a class="btn btn--sec" href="#escala">Ajustar à mão</a>
+        <button type="button" class="btn btn--sec" id="a-recomecar">Recomeçar</button>
+      </div>
+      <div class="passo__acoes so-tela">
+        <button type="button" class="link" data-ir-passo="3">Voltar</button>
+      </div>
+    </div>
+  </section>
 
   <!-- 1. QUANTO VALE A HORA -->
   <section class="painel" id="hora" role="tabpanel" aria-labelledby="tab-hora">
@@ -114,11 +245,11 @@
       <h2>Monte a escala da semana</h2>
       <button type="button" class="btn btn--sec" data-imprimir="escala"><svg class="ic"><use href="#i-imprimir"/></svg>Imprimir / salvar PDF</button>
     </div>
-    <p class="painel__intro">Para cada pessoa, marque a folga ou escreva a entrada, a saída e os minutos de intervalo. Os avisos aparecem ao lado do nome.</p>
+    <p class="painel__intro">Para cada pessoa, marque a folga ou escreva a entrada, a saída e os minutos de intervalo. Os turnos prontos preenchem todos os dias de trabalho com um toque.</p>
 
     <label class="chk chk--linha"><input type="checkbox" data-k="conv30"> Minha convenção permite 30 minutos de intervalo</label>
 
-    <div class="cobertura" aria-label="Quantas pessoas trabalham em cada dia">
+    <div class="cobertura">
       <p class="cobertura__titulo">Quantas pessoas trabalham em cada dia</p>
       <ol class="cobertura__dias" id="e-cobertura"></ol>
     </div>
@@ -137,7 +268,7 @@
       <h2>Rodízio do mês</h2>
       <button type="button" class="btn btn--sec" data-imprimir="rodizio"><svg class="ic"><use href="#i-imprimir"/></svg>Imprimir / salvar PDF</button>
     </div>
-    <p class="painel__intro">O mês começa igual à escala da semana. Toque num dia para trocar entre trabalho e folga. Os domingos ficam em amarelo.</p>
+    <p class="painel__intro" id="r-intro">Toque num dia para trocar entre trabalho e folga. Os domingos ficam em amarelo e os feriados têm uma estrela.</p>
 
     <div class="campos campos--3">
       <div class="campo">
@@ -159,7 +290,7 @@
     <div id="r-pessoas" class="pessoas"></div>
 
     <div class="acoes">
-      <button type="button" class="btn btn--sec" id="r-recopiar">Copiar de novo a escala da semana</button>
+      <button type="button" class="btn btn--sec" id="r-recopiar">Desfazer as mudanças deste mês</button>
     </div>
   </section>
 
@@ -169,7 +300,7 @@
       <h2>Minha equipe dá conta?</h2>
       <button type="button" class="btn btn--sec" data-imprimir="equipe"><svg class="ic"><use href="#i-imprimir"/></svg>Imprimir / salvar PDF</button>
     </div>
-    <p class="painel__intro">Marque os dias em que o negócio abre e quantas pessoas você precisa em cada um. Cada funcionário na escala 5x2 cobre 5 dias por semana.</p>
+    <p class="painel__intro">Marque os dias em que o negócio abre e quantas pessoas você precisa em cada um. Cada funcionário na escala 5x2 cobre 5 pessoas-dia por semana. <span class="dica">1 pessoa-dia = 1 pessoa trabalhando 1 dia.</span></p>
 
     <div class="dias-equipe" id="q-dias"></div>
 
@@ -193,12 +324,13 @@
 
     <div class="campos campos--2">
       <div class="campo">
-        <label for="f-turnos">Turnos a cobrir por semana</label>
-        <input id="f-turnos" data-k="refTurnos" inputmode="numeric" autocomplete="off">
+        <label for="f-turnos">Pessoas-dia a cobrir por semana</label>
+        <input id="f-turnos" data-k="refTurnos" inputmode="numeric" autocomplete="off" aria-describedby="f-turnos-dica">
+        <p class="dica" id="f-turnos-dica">1 pessoa-dia = 1 pessoa trabalhando 1 dia.</p>
         <button type="button" class="link" id="f-usar-equipe"></button>
       </div>
       <div class="campo">
-        <label for="f-horas">Horas de cada turno</label>
+        <label for="f-horas">Horas de trabalho em cada pessoa-dia</label>
         <input id="f-horas" data-k="refHoras" inputmode="decimal" autocomplete="off">
       </div>
       <div class="campo">

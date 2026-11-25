@@ -7,8 +7,11 @@
   const CHAVE = 'mapa5x2:v1';
   const DIAS = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
   const DIAS_NOME = ['segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'];
+  const DIAS_CURTO = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
+  const DIAS_LETRA = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
   const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-  const ABAS = ['hora', 'escala', 'rodizio', 'equipe', 'reforco', 'falta'];
+  const FERRAMENTAS = ['hora', 'escala', 'rodizio', 'equipe', 'reforco', 'falta'];
+  const ROTAS = ['inicio', ...FERRAMENTAS];
 
   /* ---------- formatos ---------- */
   const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -22,10 +25,16 @@
     const m = min % 60;
     return (neg ? '-' : '') + (m ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`);
   };
-  const dataBR = (iso) => iso.split('-').reverse().join('/');
   const pad = (n) => String(n).padStart(2, '0');
+  const dataBR = (iso) => iso.split('-').reverse().join('/');
+  const diaMesBR = (iso) => `${iso.slice(8)}/${iso.slice(5, 7)}`;
   const hojeISO = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const lista = (itens) => (itens.length <= 1 ? itens.join('') : `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}`);
+  const plural = (n, um, varios) => `${numCurto(n)} ${n === 1 ? um : varios}`;
+  const pessoasDia = (n) => plural(n, 'pessoa-dia', 'pessoas-dia');
+  const mesNome = (mes, ano) => `${MESES[mes - 1]} de ${ano}`;
+  const maiuscula = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
   function valor(s) {
     if (typeof s === 'number') return s;
@@ -36,20 +45,66 @@
     const n = Number(s);
     return Number.isFinite(n) ? n : NaN;
   }
+  const inteiro = (s, min, max) => { const n = Math.round(valor(s)); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min; };
   const paraMin = (t) => {
     if (!t || !/^\d{1,2}:\d{2}/.test(t)) return null;
     const [h, m] = t.split(':').map(Number);
     return h * 60 + m;
   };
+  const hhmm = (m) => { m = ((Math.round(m) % 1440) + 1440) % 1440; return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
+
+  /* ---------- datas (sem fuso: tudo em UTC) ---------- */
+  const DIA_MS = 86400000;
+  const dataUTC = (iso) => { const [a, m, d] = iso.split('-').map(Number); return Date.UTC(a, m - 1, d); };
+  const isoDeUTC = (t) => { const d = new Date(t); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };
+  const addDias = (iso, n) => isoDeUTC(dataUTC(iso) + n * DIA_MS);
+  const diasEntre = (a, b) => Math.round((dataUTC(b) - dataUTC(a)) / DIA_MS);
+  const isoDe = (ano, mes, dia) => `${ano}-${pad(mes)}-${pad(dia)}`;
+  const dsDe = (iso) => (new Date(dataUTC(iso)).getUTCDay() + 6) % 7; // SEG = 0
+  const segundaDe = (iso) => addDias(iso, -dsDe(iso));
+  const diasNoMes = (ano, mes) => new Date(ano, mes, 0).getDate();
+  const mesVizinho = (ano, mes, delta) => {
+    let m = mes + delta, a = ano;
+    while (m < 1) { m += 12; a--; }
+    while (m > 12) { m -= 12; a++; }
+    return [a, m];
+  };
+  const diasDoMes = (ano, mes) => Array.from({ length: diasNoMes(ano, mes) }, (_, i) => isoDe(ano, mes, i + 1));
 
   /* ---------- regras ---------- */
   const faseDaData = (iso) => R.fases.find((f) => (!f.inicio || iso >= f.inicio) && (!f.fim || iso <= f.fim)) || R.fases[R.fases.length - 1];
-  const faseAtual = () => faseDaData(estado.data || hojeISO());
+  const dataPadrao = () => { const h = hojeISO(); const min = R.planejamento.dataPadraoMinima; return h < min ? min : h; };
+  const dataRef = () => estado.data || dataPadrao();
+  const faseAtual = () => faseDaData(dataRef());
 
   function intervaloMinimo(jornadaMin, conv30) {
     const faixa = R.descanso.intervalo.find((f) => jornadaMin <= f.jornadaAteMin);
     if (!faixa) return 0;
     return conv30 && faixa.minimoComConvencaoMin != null ? faixa.minimoComConvencaoMin : faixa.minimoMin;
+  }
+
+  // Folgas mínimas no mês: proporcional quando o mês junta duas fases.
+  function minimoFolgasMes(ano, mes) {
+    let soma = 0;
+    for (const iso of diasDoMes(ano, mes)) soma += faseDaData(iso).repousosSemana;
+    return Math.ceil(soma / 7);
+  }
+  function fasesDoMes(ano, mes) {
+    const vistas = [];
+    for (const iso of diasDoMes(ano, mes)) {
+      const f = faseDaData(iso);
+      const u = vistas[vistas.length - 1];
+      if (!u || u.fase !== f) vistas.push({ fase: f, de: iso, ate: iso });
+      else u.ate = iso;
+    }
+    return vistas;
+  }
+
+  function feriadoEm(iso) {
+    const m = R.feriados.moveis.find((f) => f.data === iso);
+    if (m) return m.nome;
+    const f = R.feriados.fixos.find((x) => x.dia === iso.slice(5));
+    return f ? f.nome : null;
   }
 
   /* ---------- estado ---------- */
@@ -61,11 +116,26 @@
     dias: DIAS.map((_, i) => (i < 5 ? { folga: false, ent: '08:00', sai: '17:00', int: '60' } : { folga: true, ent: '08:00', sai: '17:00', int: '60' }))
   });
 
+  function assistPadrao() {
+    const [ano, mes] = mesVizinho(...hojeISO().split('-').slice(0, 2).map(Number), 1);
+    return {
+      passo: 1,
+      negocio: null,
+      abre: '08:00', fecha: '17:00', turnos: '1',
+      pausa: false, pausaIni: '15:00', pausaFim: '18:00',
+      atividade: 'comercio',
+      dias: DIAS.map((_, i) => ({ aberto: i < 5, pessoas: '2' })),
+      func: '3',
+      nomes: [],
+      mes, ano
+    };
+  }
+
   function padrao() {
     const d = new Date();
     return {
       data: null,
-      aba: 'hora',
+      aba: 'inicio',
       salario: '3.000,00',
       horasExtras: '10',
       conv30: false,
@@ -74,6 +144,8 @@
       rodAno: d.getFullYear(),
       atividade: 'comercio',
       rodEdicoes: {},
+      rodAuto: {},
+      rodReparado: {},
       eqDias: DIAS.map(() => ({ aberto: true, pessoas: '3' })),
       func: '4',
       refTurnos: '1',
@@ -84,14 +156,20 @@
       fHora: '10,00',
       fHorasSemana: '42',
       fFaltas: '1',
-      fFeriado: false
+      fFeriado: false,
+      assist: assistPadrao()
     };
   }
 
   let estado = padrao();
   try {
     const salvo = JSON.parse(localStorage.getItem(CHAVE) || 'null');
-    if (salvo && typeof salvo === 'object') estado = Object.assign(padrao(), salvo);
+    if (salvo && typeof salvo === 'object') {
+      estado = Object.assign(padrao(), salvo);
+      estado.assist = Object.assign(assistPadrao(), salvo.assist || {});
+      estado.rodAuto = estado.rodAuto || {};
+      estado.rodReparado = estado.rodReparado || {};
+    }
   } catch (e) { /* dados antigos ou corrompidos: começa do zero */ }
 
   let timerSalvar;
@@ -111,8 +189,14 @@
   function preencherCampos(exceto) {
     $$('[data-k]').forEach((el) => {
       if (el === exceto) return;
-      const k = el.dataset.k;
-      const v = estado[k];
+      const v = estado[el.dataset.k];
+      if (el.type === 'checkbox') el.checked = !!v;
+      else if (el.type === 'radio') el.checked = String(v) === el.value;
+      else if (el.value !== String(v ?? '')) el.value = v ?? '';
+    });
+    $$('[data-a]').forEach((el) => {
+      if (el === exceto) return;
+      const v = estado.assist[el.dataset.a];
       if (el.type === 'checkbox') el.checked = !!v;
       else if (el.type === 'radio') el.checked = String(v) === el.value;
       else if (el.value !== String(v ?? '')) el.value = v ?? '';
@@ -123,7 +207,9 @@
   document.addEventListener('change', aoMudarCampo);
   function aoMudarCampo(ev) {
     const el = ev.target;
-    if (!el.dataset || !el.dataset.k) return;
+    if (!el.dataset) return;
+    if (el.dataset.a) return aoMudarAssist(el, ev.type);
+    if (!el.dataset.k) return;
     const k = el.dataset.k;
     if (el.type === 'checkbox') estado[k] = el.checked;
     else if (el.type === 'radio') { if (!el.checked) return; estado[k] = el.value; }
@@ -138,40 +224,54 @@
   /* ---------- fase e data ---------- */
   const inputData = $('#data-ref');
   function mostrarFase() {
-    const iso = estado.data || hojeISO();
+    const iso = dataRef();
     inputData.value = iso;
     const f = faseDaData(iso);
     const periodo = f.inicio && f.fim ? `de ${dataBR(f.inicio)} a ${dataBR(f.fim)}`
       : f.fim ? `até ${dataBR(f.fim)}` : `a partir de ${dataBR(f.inicio)}`;
-    $('#fase-selo').innerHTML = `<strong>Fase ${f.horasSemana}h</strong> ${periodo} · divisor ${f.divisor} · ${f.repousosSemana} ${f.repousosSemana > 1 ? 'repousos' : 'repouso'} por semana`;
+    $('#fase-selo').innerHTML = `Regras de <strong>${f.horasSemana}h por semana</strong>, ${periodo} · ${f.repousosSemana} ${f.repousosSemana > 1 ? 'folgas' : 'folga'} por semana`;
+    const avisoEl = $('#fase-aviso');
+    const planejando = !estado.data && hojeISO() < R.planejamento.dataPadraoMinima;
+    avisoEl.hidden = !planejando;
+    avisoEl.textContent = R.planejamento.aviso;
     $$('[data-ir-data]').forEach((b) => {
       const alvo = b.dataset.irData === 'hoje' ? hojeISO() : b.dataset.irData;
-      b.setAttribute('aria-pressed', String(faseDaData(alvo) === f && (b.dataset.irData !== 'hoje' || !estado.data)));
+      b.setAttribute('aria-pressed', String(alvo === iso));
     });
   }
-  inputData.addEventListener('change', () => {
-    if (!inputData.value) return;
-    estado.data = inputData.value === hojeISO() ? null : inputData.value;
-    salvar(); mostrarFase(); calcularTudo();
+  function mudarData(iso) {
+    estado.data = !iso || iso === dataPadrao() ? null : iso;
+    salvar(); mostrarFase(); desenharEscala(); calcularTudo(); desenharRodizio();
+    if (estado.aba === 'inicio') desenharAssist();
+  }
+  inputData.addEventListener('change', () => { if (inputData.value) mudarData(inputData.value); });
+  $$('[data-ir-data]').forEach((b) => b.addEventListener('click', () => mudarData(b.dataset.irData === 'hoje' ? hojeISO() : b.dataset.irData)));
+  $('#fase-abrir').addEventListener('click', () => {
+    const p = $('#fase-painel');
+    p.hidden = !p.hidden;
+    $('#fase-abrir').setAttribute('aria-expanded', String(!p.hidden));
+    if (!p.hidden) inputData.focus();
   });
-  $$('[data-ir-data]').forEach((b) => b.addEventListener('click', () => {
-    estado.data = b.dataset.irData === 'hoje' ? null : b.dataset.irData;
-    salvar(); mostrarFase(); calcularTudo();
-  }));
 
-  /* ---------- abas ---------- */
+  /* ---------- rotas e abas ---------- */
   const botoesAba = $$('[role="tab"]');
   function abrirAba(id, focar) {
-    if (!ABAS.includes(id)) id = 'hora';
+    if (!ROTAS.includes(id)) id = 'inicio';
     estado.aba = id;
+    const noAssist = id === 'inicio';
+    $('#abas').hidden = noAssist;
+    $('#inicio').hidden = !noAssist;
     botoesAba.forEach((b) => {
       const ativa = b.dataset.aba === id;
       b.setAttribute('aria-selected', String(ativa));
-      b.tabIndex = ativa ? 0 : -1;
+      b.tabIndex = ativa || (noAssist && b === botoesAba[0]) ? 0 : -1;
       if (ativa && focar) b.focus();
     });
-    ABAS.forEach((a) => { $('#' + a).hidden = a !== id; });
+    FERRAMENTAS.forEach((a) => { $('#' + a).hidden = a !== id; });
     if (location.hash !== '#' + id) history.replaceState(null, '', '#' + id);
+    if (noAssist) desenharAssist();
+    if (id === 'escala') desenharEscala(), calcularEscala();
+    if (id === 'rodizio') desenharRodizio();
     salvar();
   }
   botoesAba.forEach((b, i) => {
@@ -185,14 +285,15 @@
       if (j != null) { ev.preventDefault(); abrirAba(botoesAba[j].dataset.aba, true); }
     });
   });
-  window.addEventListener('hashchange', () => abrirAba(location.hash.slice(1)));
+  window.addEventListener('hashchange', () => { abrirAba(location.hash.slice(1)); window.scrollTo(0, 0); });
 
   /* ---------- imprimir ---------- */
-  $$('[data-imprimir]').forEach((b) => b.addEventListener('click', () => {
-    const alvo = b.dataset.imprimir;
-    document.body.dataset.imprimir = alvo;
+  document.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-imprimir]');
+    if (!b) return;
+    document.body.dataset.imprimir = b.dataset.imprimir;
     window.print();
-  }));
+  });
   window.addEventListener('afterprint', () => { delete document.body.dataset.imprimir; });
 
   /* =========================================================
@@ -281,14 +382,36 @@
     return { dias, total, folgas, avisos };
   }
 
+  // Turnos prontos (Manhã, Tarde, Integral) pela fase atual e pelo horário do negócio.
+  function turnosProntos() {
+    const fase = faseAtual();
+    const T = R.turnosProntos;
+    const pres = fase.limiteDiaMin + T.intervaloMin;
+    const a = estado.assist;
+    const abre = (a.negocio && paraMin(a.abre)) ?? paraMin(T.manhaInicio);
+    const fecha = (a.negocio && paraMin(a.fecha)) ?? paraMin(T.tardeFim);
+    const integral = paraMin(T.integralInicio);
+    const int = String(T.intervaloMin);
+    return [
+      { nome: 'Manhã', ent: hhmm(abre), sai: hhmm(abre + pres), int },
+      { nome: 'Tarde', ent: hhmm(fecha - pres), sai: hhmm(fecha), int },
+      { nome: 'Integral', ent: hhmm(integral), sai: hhmm(integral + pres), int }
+    ];
+  }
+
   function desenharEscala() {
     const caixa = $('#e-pessoas');
+    const tp = turnosProntos();
     caixa.innerHTML = estado.pessoas.map((p, pi) => `
       <article class="pessoa" data-p="${pi}">
         <div class="pessoa__cab">
           <div class="campo campo--nome">
-            <label for="e-nome-${p.id}">Nome</label>
+            <label for="e-nome-${p.id}">Nome${p.turno ? ` <span class="pessoa__turno">turno da ${p.turno.toLowerCase()}</span>` : ''}</label>
             <input id="e-nome-${p.id}" data-pf="nome" value="${esc(p.nome)}" autocomplete="off">
+          </div>
+          <div class="prontos" role="group" aria-label="Turnos prontos para ${esc(p.nome)}">
+            <span class="prontos__rot">Preencher os dias de trabalho com:</span>
+            ${tp.map((t, i) => `<button type="button" class="chip chip--mini" data-pronto="${i}">${t.nome} <small>${t.ent}–${t.sai}</small></button>`).join('')}
           </div>
           <p class="pessoa__total" data-out="total"></p>
           <ul class="avisos" data-out="avisos"></ul>
@@ -307,6 +430,7 @@
                 <label>Intervalo (min)<input data-df="int" inputmode="numeric" value="${esc(d.int)}"></label>
               </div>
               <p class="dia__horas" data-out="horas"></p>
+              <button type="button" class="copiar" data-copiar="${di}">Copiar este horário para os outros dias de trabalho</button>
             </li>`).join('')}
         </ol>
       </article>`).join('');
@@ -314,6 +438,8 @@
     $('#e-add').disabled = estado.pessoas.length >= max;
     $('#e-add-nota').textContent = estado.pessoas.length >= max ? `A escala vai até ${max} pessoas.` : `${estado.pessoas.length} de ${max} pessoas.`;
   }
+
+  const necessidadeDia = (ds) => { const d = estado.eqDias[ds]; return d && d.aberto ? Math.max(0, Math.round(valor(d.pessoas) || 0)) : 0; };
 
   function calcularEscala() {
     const fase = faseAtual();
@@ -333,7 +459,19 @@
         ? r.avisos.map((a) => aviso(a)).join('')
         : aviso(`Tudo certo pelas regras de ${fase.horasSemana}h.`, 'ok');
     });
-    $('#e-cobertura').innerHTML = cont.map((n, i) => `<li class="${i === 6 ? 'dom' : ''}"><span>${DIAS[i]}</span><strong>${n}</strong></li>`).join('');
+    $('#e-cobertura').innerHTML = cont.map((n, i) => {
+      const precisa = necessidadeDia(i);
+      const falta = n < precisa;
+      return `<li class="${i === 6 ? 'dom' : ''}${falta ? ' falta' : ''}"><span>${DIAS[i]}</span><strong>${n}</strong>${precisa ? `<small>de ${precisa}</small>` : ''}</li>`;
+    }).join('');
+  }
+
+  function soltarDoRodizioAutomatico(p) {
+    if (!p.ciclo) return;
+    p.ciclo = null;
+    p.cicloInicio = null;
+    Object.values(estado.rodAuto).forEach((m) => { delete m[p.id]; });
+    estado.rodReparado = {};
   }
 
   $('#e-pessoas').addEventListener('input', (ev) => {
@@ -348,25 +486,38 @@
     } else if (el.dataset.df) {
       const d = p.dias[Number(el.closest('.dia').dataset.d)];
       d[el.dataset.df] = el.type === 'checkbox' ? el.checked : el.value;
+      if (el.dataset.df === 'folga') soltarDoRodizioAutomatico(p);
     } else return;
     salvar();
     calcularEscala();
-    desenharRodizio();
     calcularTudo();
   });
   $('#e-pessoas').addEventListener('click', (ev) => {
-    const b = ev.target.closest('[data-remover]');
-    if (!b) return;
-    const pi = Number(b.dataset.remover);
+    const art = ev.target.closest('.pessoa');
+    if (!art) return;
+    const pi = Number(art.dataset.p);
     const p = estado.pessoas[pi];
-    if (!confirm(`Tirar ${p.nome} da escala?`)) return;
-    estado.pessoas.splice(pi, 1);
-    salvar(); desenharEscala(); desenharRodizio(); calcularTudo();
+    const rm = ev.target.closest('[data-remover]');
+    const pronto = ev.target.closest('[data-pronto]');
+    const copiar = ev.target.closest('[data-copiar]');
+    if (rm) {
+      if (!confirm(`Tirar ${p.nome} da escala?`)) return;
+      estado.pessoas.splice(pi, 1);
+    } else if (pronto) {
+      const t = turnosProntos()[Number(pronto.dataset.pronto)];
+      p.dias.forEach((d) => { if (!d.folga) Object.assign(d, { ent: t.ent, sai: t.sai, int: t.int }); });
+    } else if (copiar) {
+      const o = p.dias[Number(copiar.dataset.copiar)];
+      p.dias.forEach((d) => { if (!d.folga) Object.assign(d, { ent: o.ent, sai: o.sai, int: o.int }); });
+    } else return;
+    salvar(); desenharEscala(); calcularTudo();
+    const alvo = rm ? $('#e-add') : $(`.pessoa[data-p="${pi}"] ${pronto ? `[data-pronto="${pronto.dataset.pronto}"]` : `[data-copiar="${copiar.dataset.copiar}"]`}`);
+    if (alvo) alvo.focus();
   });
   $('#e-add').addEventListener('click', () => {
     if (estado.pessoas.length >= R.maxPessoasNaEscala) return;
     estado.pessoas.push(novaPessoa(estado.pessoas.length + 1));
-    salvar(); desenharEscala(); desenharRodizio(); calcularTudo();
+    salvar(); desenharEscala(); calcularTudo();
     const campos = $$('.pessoa [data-pf="nome"]');
     const novo = campos[campos.length - 1];
     if (novo) { novo.focus(); novo.select(); }
@@ -375,86 +526,145 @@
   /* =========================================================
      3. RODÍZIO DO MÊS
      ========================================================= */
-  const chaveMes = () => `${estado.rodAno}-${pad(estado.rodMes)}`;
-  const diaDaSemana = (ano, mes, dia) => (new Date(ano, mes - 1, dia).getDay() + 6) % 7; // SEG = 0
+  const chaveDeISO = (iso) => iso.slice(0, 7);
+  const chaveMes = (ano, mes) => `${ano}-${pad(mes)}`;
 
-  function repousosDoMes(ano, mes, nDias) {
-    const a = faseDaData(`${ano}-${pad(mes)}-01`);
-    const b = faseDaData(`${ano}-${pad(mes)}-${pad(nDias)}`);
-    return a.repousosSemana >= b.repousosSemana ? a : b;
+  // Folga pela escala base: o rodízio automático (ciclo de semanas) ou o padrão da escala da semana.
+  function baseFolga(p, iso) {
+    const ds = dsDe(iso);
+    if (p.ciclo && p.cicloInicio) {
+      const P = p.ciclo.length;
+      const w = ((Math.floor(diasEntre(p.cicloInicio, iso) / 7) % P) + P) % P;
+      return !!p.ciclo[w][ds];
+    }
+    return !!p.dias[ds].folga;
+  }
+  const lerMapa = (mapa, p, iso) => {
+    const v = ((mapa[chaveDeISO(iso)] || {})[p.id] || {})[Number(iso.slice(8))];
+    return v == null ? null : v === 'T';
+  };
+  const trabalhaAuto = (p, iso) => { const a = lerMapa(estado.rodAuto, p, iso); return a != null ? a : !baseFolga(p, iso); };
+  const trabalhaEm = (p, iso) => { const e = lerMapa(estado.rodEdicoes, p, iso); return e != null ? e : trabalhaAuto(p, iso); };
+  function gravar(mapa, p, iso, trab, referencia) {
+    const k = chaveDeISO(iso);
+    const dia = Number(iso.slice(8));
+    mapa[k] = mapa[k] || {};
+    const ed = (mapa[k][p.id] = mapa[k][p.id] || {});
+    if (trab === referencia) delete ed[dia];
+    else ed[dia] = trab ? 'T' : 'F';
+  }
+  const definirAuto = (p, iso, trab) => gravar(estado.rodAuto, p, iso, trab, !baseFolga(p, iso));
+  const definirEdicao = (p, iso, trab) => gravar(estado.rodEdicoes, p, iso, trab, trabalhaAuto(p, iso));
+
+  const janelaDomingo = () => R.descanso.domingoACadaSemanas[estado.atividade] || R.descanso.domingoACadaSemanas.outras;
+
+  function maiorSequencia(p, de, ate) {
+    let maior = 0, atual = 0;
+    for (let iso = de; iso <= ate; iso = addDias(iso, 1)) {
+      atual = trabalhaEm(p, iso) ? atual + 1 : 0;
+      if (atual > maior) maior = atual;
+    }
+    return maior;
   }
 
-  function mesDaPessoa(p, ano, mes, nDias) {
-    const ed = (estado.rodEdicoes[chaveMes()] || {})[p.id] || {};
-    const lista = [];
-    for (let dia = 1; dia <= nDias; dia++) {
-      const ds = diaDaSemana(ano, mes, dia);
-      const base = p.dias[ds];
-      const baseTrab = !base.folga;
-      const trab = ed[dia] != null ? ed[dia] === 'T' : baseTrab;
-      lista.push({ dia, ds, trab, editado: ed[dia] != null, base });
+  // Confere o mês de uma pessoa: folgas, dias seguidos (com os 6 dias do mês anterior) e domingos.
+  function checarMes(p, ano, mes) {
+    const isos = diasDoMes(ano, mes);
+    const minimo = minimoFolgasMes(ano, mes);
+    const janela = janelaDomingo();
+    const dias = isos.map((iso) => ({ iso, dia: Number(iso.slice(8)), ds: dsDe(iso), trab: trabalhaEm(p, iso) }));
+    const folgas = dias.filter((d) => !d.trab).length;
+
+    const anteriores = [];
+    for (let k = 6; k >= 1; k--) { const iso = addDias(isos[0], -k); anteriores.push({ iso, trab: trabalhaEm(p, iso) }); }
+    const sequencia = [...anteriores, ...dias];
+    let maior = 0, atual = 0, inicio = null, iniMaior = null, fimMaior = null;
+    sequencia.forEach((d, i) => {
+      if (d.trab) {
+        if (atual === 0) inicio = d.iso;
+        atual++;
+        if (i >= anteriores.length && atual > maior) { maior = atual; iniMaior = inicio; fimMaior = d.iso; }
+      } else atual = 0;
+    });
+    const trecho = () => (chaveDeISO(iniMaior) === chaveDeISO(fimMaior)
+      ? `do dia ${Number(iniMaior.slice(8))} ao dia ${Number(fimMaior.slice(8))}`
+      : `de ${diaMesBR(iniMaior)} a ${diaMesBR(fimMaior)}, contando o fim do mês anterior`);
+
+    const doms = dias.filter((d) => d.ds === 6);
+    const domFolga = doms.filter((d) => !d.trab).length;
+    let semDomingo = null;
+    for (let i = 0; i + janela <= doms.length; i++) {
+      if (doms.slice(i, i + janela).every((d) => d.trab)) { semDomingo = doms.slice(i, i + janela); break; }
     }
-    return lista;
+
+    const problemas = [];
+    const oks = [];
+    if (folgas >= minimo) oks.push(`${folgas} folgas no mês. O mínimo é ${minimo}.`);
+    else problemas.push(`Só ${folgas} folgas no mês. O mínimo é ${minimo}: faltam ${minimo - folgas}.`);
+    if (maior > R.descanso.maxDiasSeguidos) problemas.push(`${maior} dias seguidos de trabalho (${trecho()}). O máximo é ${R.descanso.maxDiasSeguidos}.`);
+    else if (maior === R.descanso.maxDiasSeguidos) problemas.push(`${maior} dias seguidos de trabalho (${trecho()}). Só vale com regime de compensação previsto na convenção.`);
+    else oks.push(`No máximo ${maior} dias seguidos de trabalho.`);
+    if (semDomingo) problemas.push(`Trabalha ${janela} domingos seguidos (dias ${semDomingo.map((d) => d.dia).join(', ')}). ${estado.atividade === 'comercio' ? 'No comércio' : 'Nesta atividade'}, a folga tem que cair no domingo pelo menos 1 vez a cada ${janela} semanas.`);
+    else if (doms.length) oks.push(`${domFolga} de ${doms.length} domingos de folga.`);
+    return { dias, folgas, minimo, maior, problemas, oks };
   }
 
   function preencherSelectsMes() {
-    $('#r-mes').innerHTML = MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+    const opMes = MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
     const anoHoje = new Date().getFullYear();
     const anos = [];
     for (let a = Math.min(anoHoje, 2026); a <= Math.max(anoHoje, 2026) + 3; a++) anos.push(a);
-    if (!anos.includes(estado.rodAno)) anos.push(estado.rodAno);
-    $('#r-ano').innerHTML = anos.sort().map((a) => `<option value="${a}">${a}</option>`).join('');
+    [estado.rodAno, estado.assist.ano].forEach((a) => { if (!anos.includes(a)) anos.push(a); });
+    const opAno = anos.sort().map((a) => `<option value="${a}">${a}</option>`).join('');
+    $('#r-mes').innerHTML = opMes; $('#a-mes').innerHTML = opMes;
+    $('#r-ano').innerHTML = opAno; $('#a-ano').innerHTML = opAno;
+  }
+
+  function textoRegrasDoMes(ano, mes) {
+    const fases = fasesDoMes(ano, mes);
+    const minimo = minimoFolgasMes(ano, mes);
+    const nDias = diasNoMes(ano, mes);
+    const janela = janelaDomingo();
+    const regras = fases.length > 1
+      ? `Este mês junta duas fases (${fases.map((f) => `${f.fase.horasSemana}h de ${diaMesBR(f.de)} a ${diaMesBR(f.ate)}`).join(' e ')}), então o mínimo de folgas é proporcional:`
+      : `Pelas regras de ${fases[0].fase.horasSemana}h,`;
+    return `<p><strong>${maiuscula(mesNome(mes, ano))}</strong> tem ${nDias} dias. ${regras} cada pessoa precisa de pelo menos <strong>${minimo} folgas</strong> no mês e de uma folga no domingo a cada ${janela} semanas${estado.atividade === 'comercio' ? ' (comércio)' : ''}.</p>`;
+  }
+
+  function textoFeriados(ano, mes) {
+    const fer = diasDoMes(ano, mes).map((iso) => ({ iso, nome: feriadoEm(iso) })).filter((f) => f.nome);
+    if (!fer.length) return '';
+    return `<ul class="avisos">${aviso(`Feriado${fer.length > 1 ? 's' : ''} no mês: ${lista(fer.map((f) => `${diaMesBR(f.iso)} (${f.nome})`))}. ${R.feriados.aviso}`, 'info')}</ul>`;
   }
 
   function desenharRodizio() {
     const ano = estado.rodAno;
     const mes = estado.rodMes;
-    const nDias = new Date(ano, mes, 0).getDate();
-    const fase = repousosDoMes(ano, mes, nDias);
-    const minimo = Math.ceil((fase.repousosSemana * nDias) / 7);
-    const janela = R.descanso.domingoACadaSemanas[estado.atividade] || R.descanso.domingoACadaSemanas.outras;
-    const vazio = diaDaSemana(ano, mes, 1);
+    const key = chaveMes(ano, mes);
+    if (estado.pessoas.some((p) => p.ciclo) && !estado.rodReparado[key]) { repararMes(ano, mes); salvar(); }
+    const vazio = dsDe(isoDe(ano, mes, 1));
+    const automatico = estado.pessoas.some((p) => p.ciclo);
+    $('#r-intro').textContent = automatico
+      ? 'Este rodízio veio do assistente, com os domingos de folga girando entre as pessoas. Toque num dia para trocar entre trabalho e folga. Os feriados têm uma estrela.'
+      : 'O mês começa igual à escala da semana. Toque num dia para trocar entre trabalho e folga. Os domingos ficam em amarelo e os feriados têm uma estrela.';
 
-    $('#r-resumo').innerHTML = `<p><strong>${MESES[mes - 1][0].toUpperCase() + MESES[mes - 1].slice(1)} de ${ano}</strong> tem ${nDias} dias. Pelas regras de ${fase.horasSemana}h, cada pessoa precisa de pelo menos <strong>${minimo} folgas</strong> no mês e de uma folga no domingo a cada ${janela} semanas${estado.atividade === 'comercio' ? ' (comércio)' : ''}.</p>`;
+    $('#r-resumo').innerHTML = textoRegrasDoMes(ano, mes) + textoFeriados(ano, mes);
 
     $('#r-pessoas').innerHTML = estado.pessoas.map((p) => {
-      const dias = mesDaPessoa(p, ano, mes, nDias);
-      const folgas = dias.filter((d) => !d.trab).length;
-      // dias seguidos
-      let maior = 0, atual = 0, fimMaior = 0;
-      dias.forEach((d) => { atual = d.trab ? atual + 1 : 0; if (atual > maior) { maior = atual; fimMaior = d.dia; } });
-      // domingos
-      const doms = dias.filter((d) => d.ds === 6);
-      const domFolga = doms.filter((d) => !d.trab).length;
-      let semDomingo = null;
-      for (let i = 0; i + janela <= doms.length; i++) {
-        if (doms.slice(i, i + janela).every((d) => d.trab)) { semDomingo = doms.slice(i, i + janela); break; }
-      }
-      const avisos = [];
-      avisos.push(folgas >= minimo
-        ? aviso(`${folgas} folgas no mês. O mínimo é ${minimo}.`, 'ok')
-        : aviso(`Só ${folgas} folgas no mês. O mínimo é ${minimo}: faltam ${minimo - folgas}.`));
-      if (maior > R.descanso.maxDiasSeguidos) {
-        avisos.push(aviso(`${maior} dias seguidos de trabalho (do dia ${fimMaior - maior + 1} ao dia ${fimMaior}). O máximo é ${R.descanso.maxDiasSeguidos}.`));
-      } else if (maior === R.descanso.maxDiasSeguidos) {
-        avisos.push(aviso(`${maior} dias seguidos de trabalho (do dia ${fimMaior - maior + 1} ao dia ${fimMaior}). Só vale com regime de compensação previsto na convenção.`));
-      } else {
-        avisos.push(aviso(`No máximo ${maior} dias seguidos de trabalho.`, 'ok'));
-      }
-      avisos.push(semDomingo
-        ? aviso(`Trabalha ${janela} domingos seguidos (dias ${semDomingo.map((d) => d.dia).join(', ')}). ${estado.atividade === 'comercio' ? 'No comércio' : 'Nesta atividade'}, a folga tem que cair no domingo pelo menos 1 vez a cada ${janela} semanas.`)
-        : aviso(`${domFolga} de ${doms.length} domingos de folga.`, 'ok'));
-
+      const c = checarMes(p, ano, mes);
+      const avisos = [...c.problemas.map((t) => aviso(t)), ...c.oks.map((t) => aviso(t, 'ok'))];
       const celulas = [];
       for (let i = 0; i < vazio; i++) celulas.push('<li class="cal__vazio" aria-hidden="true"></li>');
-      dias.forEach((d) => {
-        const txt = d.trab ? (!d.base.folga && paraMin(d.base.ent) != null ? d.base.ent.replace(':', 'h').replace('h00', 'h') : 'Trab.') : 'Folga';
-        celulas.push(`<li><button type="button" class="cal__dia${d.trab ? '' : ' cal__dia--folga'}${d.ds === 6 ? ' cal__dia--dom' : ''}${d.editado ? ' cal__dia--editado' : ''}" data-pid="${p.id}" data-dia="${d.dia}" aria-label="${d.dia} de ${MESES[mes - 1]}, ${DIAS_NOME[d.ds]}: ${d.trab ? 'trabalho' : 'folga'}. Tocar para trocar."><span class="cal__num">${d.dia}</span><span class="cal__txt">${txt}</span></button></li>`);
+      c.dias.forEach((d) => {
+        const base = p.dias[d.ds];
+        const fer = feriadoEm(d.iso);
+        const editado = lerMapa(estado.rodEdicoes, p, d.iso) != null;
+        const txt = d.trab ? (!base.folga && paraMin(base.ent) != null ? base.ent.replace(':', 'h').replace('h00', 'h') : 'Trab.') : 'Folga';
+        celulas.push(`<li><button type="button" class="cal__dia${d.trab ? '' : ' cal__dia--folga'}${d.ds === 6 ? ' cal__dia--dom' : ''}${fer ? ' cal__dia--feriado' : ''}${editado ? ' cal__dia--editado' : ''}" data-pid="${p.id}" data-iso="${d.iso}" aria-label="${d.dia} de ${MESES[mes - 1]}, ${DIAS_NOME[d.ds]}${fer ? `, feriado (${fer})` : ''}: ${d.trab ? 'trabalho' : 'folga'}. Tocar para trocar."><span class="cal__num">${d.dia}${fer ? '<span class="cal__fer" aria-hidden="true">★</span>' : ''}</span><span class="cal__txt">${txt}</span></button></li>`);
       });
-
       return `<article class="pessoa pessoa--mes">
         <div class="pessoa__cab">
-          <h3 class="pessoa__nome">${esc(p.nome || 'Sem nome')}</h3>
+          <h3 class="pessoa__nome">${esc(p.nome || 'Sem nome')}${p.turno ? ` <span class="pessoa__turno">${esc(p.turno)}</span>` : ''}</h3>
           <ul class="avisos">${avisos.join('')}</ul>
         </div>
         <div class="cal">
@@ -468,29 +678,520 @@
   $('#r-pessoas').addEventListener('click', (ev) => {
     const b = ev.target.closest('.cal__dia');
     if (!b) return;
-    const pid = b.dataset.pid;
-    const dia = Number(b.dataset.dia);
-    const p = estado.pessoas.find((x) => x.id === pid);
+    const p = estado.pessoas.find((x) => x.id === b.dataset.pid);
     if (!p) return;
-    const nDias = new Date(estado.rodAno, estado.rodMes, 0).getDate();
-    const atual = mesDaPessoa(p, estado.rodAno, estado.rodMes, nDias)[dia - 1];
-    const k = chaveMes();
-    estado.rodEdicoes[k] = estado.rodEdicoes[k] || {};
-    const ed = (estado.rodEdicoes[k][pid] = estado.rodEdicoes[k][pid] || {});
-    const novoTrab = !atual.trab;
-    const baseTrab = !atual.base.folga;
-    if (novoTrab === baseTrab) delete ed[dia];
-    else ed[dia] = novoTrab ? 'T' : 'F';
+    const iso = b.dataset.iso;
+    definirEdicao(p, iso, !trabalhaEm(p, iso));
     salvar();
     desenharRodizio();
-    const igual = $(`.cal__dia[data-pid="${pid}"][data-dia="${dia}"]`);
+    const igual = $(`.cal__dia[data-pid="${p.id}"][data-iso="${iso}"]`);
     if (igual) igual.focus();
   });
   $('#r-recopiar').addEventListener('click', () => {
-    if (!confirm('Apagar as mudanças feitas neste mês e copiar de novo a escala da semana?')) return;
-    delete estado.rodEdicoes[chaveMes()];
+    if (!confirm('Desfazer as mudanças feitas à mão neste mês?')) return;
+    delete estado.rodEdicoes[chaveMes(estado.rodAno, estado.rodMes)];
     salvar(); desenharRodizio();
   });
+
+  /* =========================================================
+     GERADOR AUTOMÁTICO DE ESCALA E RODÍZIO
+     ========================================================= */
+
+  // Horário de cada turno do negócio, dentro do limite diário da fase.
+  function turnosDoNegocio(neg, fase) {
+    const lim = fase.limiteDiaMin;
+    const abre = paraMin(neg.abre) ?? 480;
+    const fecha = paraMin(neg.fecha) ?? 1020;
+    let span = fecha - abre;
+    if (span <= 0) span += 1440;
+    const intPara = (pres) => {
+      for (const i of [0, 15, 60]) { const t = pres - i; if (t > 0 && i >= intervaloMinimo(t, false)) return i; }
+      return 60;
+    };
+    const mk = (nome, ini, pres, int) => ({ nome, ent: hhmm(ini), sai: hhmm(ini + pres), int: String(int), liq: pres - int });
+    if (Number(neg.turnos) === 2) {
+      let pres = Math.min(span, lim + 60);
+      const int = intPara(pres);
+      if (pres - int > lim) pres = lim + int;
+      return [mk('Manhã', abre, pres, int), mk('Tarde', abre + span - pres, pres, int)];
+    }
+    if (neg.pausa) {
+      const p = (paraMin(neg.pausaFim) ?? 0) - (paraMin(neg.pausaIni) ?? 0);
+      if (p > 0 && p < span) {
+        const int = Math.max(p, span - lim);
+        return [mk('Integral', abre, span, int)];
+      }
+    }
+    let int = intPara(span);
+    let pres = span;
+    if (pres - int > lim) { int = 60; pres = lim + 60; }
+    return [mk('Integral', abre, pres, int)];
+  }
+
+  const combinacoes = (arr, k) => (k <= 0 ? [[]] : arr.flatMap((x, i) => combinacoes(arr.slice(i + 1), k - 1).map((c) => [x, ...c])));
+  const mascara = (dias) => { const m = Array(7).fill(false); dias.forEach((d) => { m[d] = true; }); return m; };
+  function maiorSequenciaCiclo(semanas) {
+    const s = semanas.flat();
+    if (s.every((f) => !f)) return Infinity;
+    let maior = 0, atual = 0;
+    for (const f of [...s, ...s]) { atual = f ? 0 : atual + 1; if (atual > maior) maior = atual; }
+    return maior;
+  }
+
+  /* Folgas de um grupo de n pessoas num ciclo de P semanas.
+     Cada pessoa: um par de folgas nas semanas normais e, na sua semana de domingo, folga no domingo + 1 dia.
+     Escolhe por busca local: primeiro cobrir a necessidade, depois espalhar a sobra (o dia mais fraco recebe mais folgas). */
+  function gerarCiclo(n, need, aberto, P) {
+    const LIM = R.descanso.maxDiasSeguidos - 1; // nunca chega a 6 seguidos
+    const abertos = [0, 1, 2, 3, 4, 5, 6].filter((d) => aberto[d]);
+    const fechados = [0, 1, 2, 3, 4, 5, 6].filter((d) => !aberto[d]);
+    const completar = (base) => {
+      const s = [...new Set(base)];
+      const k = Math.max(0, 2 - s.length);
+      return combinacoes(abertos.filter((d) => !s.includes(d)), k).map((c) => mascara([...s, ...c]));
+    };
+    const normais = completar(fechados);
+    const comDomingo = aberto[6] && P > 1 ? completar([...fechados, 6]) : null;
+
+    const opcoes = [];
+    for (let i = 0; i < n; i++) {
+      const g = i % P;
+      let ops = comDomingo
+        ? normais.flatMap((N) => comDomingo.map((S) => Array.from({ length: P }, (_, w) => (w === g ? S : N))))
+        : normais.map((N) => Array.from({ length: P }, () => N));
+      const validas = ops.filter((o) => maiorSequenciaCiclo(o) <= LIM);
+      if (validas.length) ops = validas;
+      opcoes.push(ops.length ? ops : [Array.from({ length: P }, () => mascara(fechados))]);
+    }
+
+    const trab = Array.from({ length: P }, () => Array(7).fill(0));
+    const aplicar = (o, s) => { for (let w = 0; w < P; w++) for (let d = 0; d < 7; d++) if (aberto[d] && !o[w][d]) trab[w][d] += s; };
+    const nota = (o) => {
+      aplicar(o, 1);
+      let falta = 0, menor = Infinity, soma = 0, soma2 = 0, cont = 0;
+      for (let w = 0; w < P; w++) for (const d of abertos) {
+        const sobra = trab[w][d] - need[d];
+        if (sobra < 0) falta -= sobra;
+        if (sobra < menor) menor = sobra;
+        soma += sobra; soma2 += sobra * sobra; cont++;
+      }
+      aplicar(o, -1);
+      const variancia = cont ? soma2 / cont - (soma / cont) ** 2 : 0;
+      const folgasN = o[(P > 1 ? 1 : 0) % P].map((f, d) => (f ? d : -1)).filter((d) => d >= 0);
+      const separado = folgasN.length === 2 && !(folgasN[1] - folgasN[0] === 1 || (folgasN[0] === 0 && folgasN[1] === 6)) ? 1 : 0;
+      return [falta, -menor, Math.round(variancia * 1000), separado];
+    };
+    const melhor = (a, b) => { for (let i = 0; i < a.length; i++) { if (a[i] !== b[i]) return a[i] < b[i]; } return false; };
+
+    const escolha = opcoes.map(() => 0);
+    escolha.forEach((e, i) => aplicar(opcoes[i][e], 1));
+    for (let passada = 0; passada < 12; passada++) {
+      let mudou = false;
+      for (let i = 0; i < n; i++) {
+        aplicar(opcoes[i][escolha[i]], -1);
+        let melhorJ = escolha[i];
+        let melhorNota = nota(opcoes[i][melhorJ]);
+        opcoes[i].forEach((o, j) => { const s = nota(o); if (melhor(s, melhorNota)) { melhorNota = s; melhorJ = j; } });
+        if (melhorJ !== escolha[i]) { escolha[i] = melhorJ; mudou = true; }
+        aplicar(opcoes[i][escolha[i]], 1);
+      }
+      if (!mudou) break;
+    }
+    const falta = trab.map((sem) => sem.map((t, d) => (aberto[d] ? Math.max(0, need[d] - t) : 0)));
+    return { ciclos: escolha.map((e, i) => opcoes[i][e]), falta };
+  }
+
+  // Monta as pessoas (turno + ciclo de folgas). Com 2 turnos, testa todas as divisões da equipe.
+  function gerarNegocio(neg, n, fase, P) {
+    const aberto = neg.dias.map((d) => d.aberto);
+    const need = neg.dias.map((d) => (d.aberto ? Math.max(0, Math.round(valor(d.pessoas) || 0)) : 0));
+    const turnos = turnosDoNegocio(neg, fase);
+    const somaFalta = (f) => f.flat().reduce((s, x) => s + x, 0);
+    if (turnos.length === 1) {
+      const r = gerarCiclo(n, need, aberto, P);
+      return { turnos, grupos: [{ turno: turnos[0], ciclos: r.ciclos, falta: r.falta, need }] };
+    }
+    const needM = need.map((x) => Math.ceil(x / 2));
+    const needT = need.map((x) => Math.floor(x / 2));
+    const totalM = needM.reduce((s, x) => s + x, 0);
+    const totalT = needT.reduce((s, x) => s + x, 0);
+    let melhor = null;
+    const ks = n >= 2 ? Array.from({ length: n - 1 }, (_, i) => i + 1) : [n];
+    for (const k of ks) {
+      const a = gerarCiclo(k, needM, aberto, P);
+      const b = n - k > 0 ? gerarCiclo(n - k, needT, aberto, P) : { ciclos: [], falta: Array.from({ length: P }, () => needT.slice()) };
+      const falta = somaFalta(a.falta) + somaFalta(b.falta);
+      const desvio = Math.abs(k - (n * totalM) / Math.max(1, totalM + totalT));
+      if (!melhor || falta < melhor.falta || (falta === melhor.falta && desvio < melhor.desvio)) {
+        melhor = { falta, desvio, grupos: [
+          { turno: turnos[0], ciclos: a.ciclos, falta: a.falta, need: needM },
+          { turno: turnos[1], ciclos: b.ciclos, falta: b.falta, need: needT }
+        ] };
+      }
+    }
+    return { turnos, grupos: melhor.grupos };
+  }
+
+  /* Ajusta o mês para bater o mínimo de folgas: primeiro troca uma folga de lugar dentro da semana
+     que vira o mês (sem mexer no total da semana); se não der, acrescenta uma folga no dia com mais gente sobrando. */
+  function repararMes(ano, mes) {
+    const isos = diasDoMes(ano, mes);
+    const first = isos[0];
+    const last = isos[isos.length - 1];
+    const minimo = minimoFolgasMes(ano, mes);
+    const LIM = R.descanso.maxDiasSeguidos - 1;
+    const aberto = (iso) => { const d = estado.eqDias[dsDe(iso)]; return !d || d.aberto; };
+    const sobra = (iso) => estado.pessoas.filter((q) => trabalhaEm(q, iso)).length - necessidadeDia(dsDe(iso));
+    const folgasNoMes = (p, a, m) => diasDoMes(a, m).filter((iso) => !trabalhaEm(p, iso)).length;
+
+    const bordas = [];
+    const segIni = segundaDe(first);
+    if (segIni < first) {
+      const fora = []; const dentro = [];
+      for (let i = 0; i < 7; i++) { const iso = addDias(segIni, i); (iso < first ? fora : dentro).push(iso); }
+      bordas.push({ fora, dentro, outro: mesVizinho(ano, mes, -1) });
+    }
+    const segFim = segundaDe(last);
+    if (addDias(segFim, 6) > last) {
+      const fora = []; const dentro = [];
+      for (let i = 0; i < 7; i++) { const iso = addDias(segFim, i); (iso > last ? fora : dentro).push(iso); }
+      bordas.push({ fora, dentro, outro: mesVizinho(ano, mes, 1) });
+    }
+
+    for (const p of estado.pessoas) {
+      if (!p.ciclo) continue;
+      let folgas = folgasNoMes(p, ano, mes);
+      for (let guarda = 0; folgas < minimo && guarda < 12; guarda++) {
+        let melhor = null;
+        for (const b of bordas) {
+          const minOutro = minimoFolgasMes(...b.outro);
+          for (const f of b.fora) {
+            if (trabalhaEm(p, f) || dsDe(f) === 6 || !aberto(f)) continue;
+            for (const t of b.dentro) {
+              if (!trabalhaEm(p, t) || !aberto(t)) continue;
+              definirAuto(p, f, true); definirAuto(p, t, false);
+              const ok = maiorSequencia(p, addDias(first, -14), addDias(last, 14)) <= LIM && folgasNoMes(p, ...b.outro) >= minOutro;
+              const nota = sobra(t) + 0.5;
+              definirAuto(p, f, false); definirAuto(p, t, true);
+              if (ok && (!melhor || nota > melhor.nota)) melhor = { nota, f, t };
+            }
+          }
+        }
+        for (const t of isos) {
+          if (!trabalhaEm(p, t) || !aberto(t)) continue;
+          definirAuto(p, t, false);
+          const nota = sobra(t);
+          definirAuto(p, t, true);
+          if (!melhor || nota > melhor.nota) melhor = { nota, t };
+        }
+        if (!melhor) break;
+        if (melhor.f) definirAuto(p, melhor.f, true);
+        definirAuto(p, melhor.t, false);
+        folgas = folgasNoMes(p, ano, mes);
+      }
+    }
+    estado.rodReparado[chaveMes(ano, mes)] = true;
+  }
+
+  function gerarEscala() {
+    const a = estado.assist;
+    const fase = faseAtual();
+    const n = inteiro(a.func, 1, R.maxPessoasNaEscala);
+    const P = a.dias[6].aberto ? (R.descanso.domingoACadaSemanas[a.atividade] || R.descanso.domingoACadaSemanas.outras) : 1;
+    const r = gerarNegocio(a, n, fase, P);
+    const inicio = segundaDe(isoDe(a.ano, a.mes, 1));
+    const pessoas = [];
+    r.grupos.forEach((g) => g.ciclos.forEach((ciclo) => {
+      const i = pessoas.length;
+      pessoas.push({
+        id: novoId(),
+        nome: (a.nomes[i] || '').trim() || `Pessoa ${i + 1}`,
+        turno: r.turnos.length > 1 ? g.turno.nome : null,
+        dias: DIAS.map((_, d) => ({ folga: ciclo[0][d], ent: g.turno.ent, sai: g.turno.sai, int: g.turno.int })),
+        ciclo,
+        cicloInicio: inicio
+      });
+    }));
+    estado.pessoas = pessoas;
+    estado.rodEdicoes = {};
+    estado.rodAuto = {};
+    estado.rodReparado = {};
+    estado.rodMes = a.mes;
+    estado.rodAno = a.ano;
+    estado.atividade = a.atividade;
+    estado.eqDias = a.dias.map((d) => ({ aberto: d.aberto, pessoas: String(d.aberto ? Math.max(0, Math.round(valor(d.pessoas) || 0)) : 0) }));
+    estado.func = String(n);
+    estado.gerado = { turnos: r.turnos };
+    repararMes(a.ano, a.mes);
+    const falta = faltaDoMes(a.ano, a.mes);
+    if (falta.porSemana > 0) {
+      estado.refTurnos = String(falta.porSemana);
+      estado.refHoras = numCurto(r.turnos[0].liq / 60);
+    }
+    salvar();
+    preencherCampos();
+    desenharEscala(); desenharEquipe(); calcularTudo();
+  }
+
+  // Cobertura do mês: semana a semana, por turno quando há manhã e tarde.
+  function faltaDoMes(ano, mes) {
+    const isos = diasDoMes(ano, mes);
+    const doisTurnos = estado.pessoas.some((p) => p.turno);
+    const grupos = doisTurnos ? ['Manhã', 'Tarde'] : [null];
+    const precisa = (ds, g) => { const n = necessidadeDia(ds); return g === 'Manhã' ? Math.ceil(n / 2) : g === 'Tarde' ? Math.floor(n / 2) : n; };
+    const semanas = new Map();
+    const dias = new Set();
+    for (const iso of isos) {
+      const ds = dsDe(iso);
+      let f = 0;
+      for (const g of grupos) {
+        const t = estado.pessoas.filter((p) => (g ? p.turno === g : true) && trabalhaEm(p, iso)).length;
+        f += Math.max(0, precisa(ds, g) - t);
+      }
+      if (f > 0) dias.add(ds);
+      const k = segundaDe(iso);
+      semanas.set(k, (semanas.get(k) || 0) + f);
+    }
+    const porSemana = Math.max(0, ...semanas.values());
+    return { porSemana, dias: [...dias].sort((x, y) => x - y) };
+  }
+
+  /* =========================================================
+     ASSISTENTE
+     ========================================================= */
+  function aplicarModelo(id) {
+    const m = R.modelos[id];
+    Object.assign(estado.assist, {
+      negocio: id,
+      abre: m.abre, fecha: m.fecha, turnos: String(m.turnos),
+      pausa: !!m.pausa,
+      pausaIni: m.pausa ? m.pausa[0] : '15:00',
+      pausaFim: m.pausa ? m.pausa[1] : '18:00',
+      atividade: m.atividade,
+      dias: m.dias.map((x, i) => ({ aberto: !!x, pessoas: String(m.pessoas[i]) }))
+    });
+  }
+
+  function aoMudarAssist(el, tipo) {
+    const a = estado.assist;
+    const k = el.dataset.a;
+    if (el.type === 'checkbox') a[k] = el.checked;
+    else if (el.type === 'radio') { if (!el.checked) return; a[k] = el.value; }
+    else if (k === 'mes' || k === 'ano') a[k] = Number(el.value);
+    else a[k] = el.value;
+    preencherCampos(el);
+    salvar();
+    if ((k === 'mes' || k === 'ano') && tipo === 'change') { gerarEscala(); desenharPronta(); return; }
+    if (k === 'pausa') $('#a-pausa-campos').hidden = !a.pausa;
+    if (k === 'func') { desenharNomes(); validarFunc(false); }
+    desenharEquipeAssist();
+  }
+
+  function desenharNegocios() {
+    $('#a-negocios').innerHTML = Object.entries(R.modelos).map(([id, m]) =>
+      `<button type="button" class="negocio" data-neg="${id}" aria-pressed="${estado.assist.negocio === id}">${icone(id, 'ic ic--g')}<span>${m.nome}</span></button>`).join('');
+    $('#a-form').hidden = !estado.assist.negocio;
+    $('#a-p2-seguir').disabled = !estado.assist.negocio;
+    $('#a-pausa-campos').hidden = !estado.assist.pausa;
+  }
+  function desenharDiasAssist() {
+    $('#a-dias').innerHTML = estado.assist.dias.map((d, i) => `
+      <div class="dia-eq${d.aberto ? '' : ' dia-eq--fechado'}" data-i="${i}">
+        <label class="chk"><input type="checkbox" data-ad="aberto" ${d.aberto ? 'checked' : ''}> ${DIAS[i]} abre</label>
+        <label class="dia-eq__qtd">Pessoas<input data-ad="pessoas" inputmode="numeric" value="${esc(d.pessoas)}" ${d.aberto ? '' : 'disabled'} aria-label="Pessoas necessárias em ${DIAS_NOME[i]}"></label>
+      </div>`).join('');
+  }
+  $('#a-negocios').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-neg]');
+    if (!b) return;
+    aplicarModelo(b.dataset.neg);
+    salvar();
+    desenharNegocios(); desenharDiasAssist(); preencherCampos(); desenharEquipeAssist();
+    $(`[data-neg="${b.dataset.neg}"]`).focus();
+  });
+  $('#a-dias').addEventListener('input', (ev) => {
+    const el = ev.target;
+    const box = el.closest('.dia-eq');
+    if (!box) return;
+    const d = estado.assist.dias[Number(box.dataset.i)];
+    if (el.dataset.ad === 'aberto') {
+      d.aberto = el.checked;
+      box.classList.toggle('dia-eq--fechado', !d.aberto);
+      $('[data-ad="pessoas"]', box).disabled = !d.aberto;
+    } else d.pessoas = el.value;
+    salvar(); desenharEquipeAssist();
+  });
+
+  function desenharNomes() {
+    const n = inteiro(estado.assist.func, 1, R.maxPessoasNaEscala);
+    const caixa = $('#a-nomes');
+    if (caixa.children.length === n) return;
+    caixa.innerHTML = Array.from({ length: n }, (_, i) => `
+      <div class="campo"><label for="a-nome-${i}">Pessoa ${i + 1}</label>
+      <input id="a-nome-${i}" data-nome="${i}" value="${esc(estado.assist.nomes[i] || '')}" placeholder="Pessoa ${i + 1}" autocomplete="off"></div>`).join('');
+  }
+  $('#a-nomes').addEventListener('input', (ev) => {
+    const i = ev.target.dataset.nome;
+    if (i == null) return;
+    estado.assist.nomes[Number(i)] = ev.target.value;
+    salvar();
+  });
+
+  function validarFunc(mostrar) {
+    const n = Math.round(valor(estado.assist.func));
+    const ok = Number.isFinite(n) && n >= 1 && n <= R.maxPessoasNaEscala;
+    const erro = $('#a-func-erro');
+    if (mostrar || ok) erro.textContent = ok ? '' : `Escreva quantas pessoas entram na escala, de 1 a ${R.maxPessoasNaEscala}.`;
+    $('#a-func').setAttribute('aria-invalid', String(!ok && !!erro.textContent));
+    return ok;
+  }
+
+  function contaAssist() {
+    const a = estado.assist;
+    const necessarios = a.dias.reduce((s, d) => s + (d.aberto ? Math.max(0, Math.round(valor(d.pessoas) || 0)) : 0), 0);
+    const func = Math.max(0, Math.round(valor(a.func) || 0));
+    const disponiveis = func * R.equipe.diasPorFuncionario;
+    return { necessarios, func, disponiveis, falta: necessarios - disponiveis };
+  }
+
+  function htmlConta(c, abertos) {
+    let msg;
+    if (c.falta > 0) msg = aviso(`Falta cobrir <strong>${pessoasDia(c.falta)}</strong> por semana: reorganizar a escala, pagar hora extra ou contratar reforço.`);
+    else if (c.falta < 0) msg = aviso(`A equipe dá conta e sobram ${pessoasDia(-c.falta)} por semana para cobrir férias e faltas.`, 'ok');
+    else msg = aviso('A equipe dá conta certinho, sem sobra para cobrir férias e faltas.', 'ok');
+    return `
+      <dl class="numeros">
+        <div><dt>Pessoas-dia necessárias</dt><dd>${c.necessarios}</dd><dd class="numeros__conta">soma das pessoas nos ${abertos} dias abertos</dd></div>
+        <div><dt>Pessoas-dia disponíveis</dt><dd>${c.disponiveis}</dd><dd class="numeros__conta">${c.func} ${c.func === 1 ? 'funcionário' : 'funcionários'} × ${R.equipe.diasPorFuncionario} dias</dd></div>
+        <div><dt>Diferença</dt><dd>${c.falta > 0 ? '−' + c.falta : '+' + (-c.falta)}</dd><dd class="numeros__conta">${c.falta > 0 ? 'pessoas-dia faltando' : 'pessoas-dia sobrando'}</dd></div>
+      </dl>
+      <p class="dica">1 pessoa-dia = 1 pessoa trabalhando 1 dia.</p>
+      <ul class="avisos">${msg}</ul>`;
+  }
+
+  function desenharEquipeAssist() {
+    if (estado.aba !== 'inicio') return;
+    const c = contaAssist();
+    const abertos = estado.assist.dias.filter((d) => d.aberto).length;
+    $('#a-equipe').innerHTML = `<h3>Sua equipe dá conta?</h3>${htmlConta(c, abertos)}${c.falta > 0 ? '<p class="resultado__frase">Dá para gerar a escala mesmo assim: ela mostra em que dias falta gente e quanto custa o reforço.</p>' : ''}`;
+  }
+
+  function mostrarPasso(n, focar) {
+    const a = estado.assist;
+    a.passo = n;
+    $$('.passo').forEach((el) => { el.hidden = Number(el.dataset.passo) !== n; });
+    $$('#progresso li').forEach((li) => {
+      const p = Number(li.dataset.p);
+      li.classList.toggle('feito', p < n);
+      if (p === n) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+    });
+    if (n === 2) { desenharNegocios(); desenharDiasAssist(); }
+    if (n === 3) { desenharNomes(); desenharEquipeAssist(); }
+    if (n === 4) desenharPronta();
+    preencherCampos();
+    salvar();
+    if (focar) {
+      const h = $(`.passo[data-passo="${n}"] h2`);
+      h.tabIndex = -1;
+      h.focus({ preventScroll: true });
+      $('#inicio').scrollIntoView({ block: 'start' });
+    }
+  }
+  function desenharAssist() { mostrarPasso(estado.assist.passo || 1, false); }
+
+  $('#inicio').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-ir-passo]');
+    if (!b) return;
+    const n = Number(b.dataset.irPasso);
+    if (n === 3 && !estado.assist.negocio) return;
+    mostrarPasso(n, true);
+  });
+  $('#a-gerar').addEventListener('click', () => {
+    if (!validarFunc(true)) { $('#a-func').focus(); return; }
+    gerarEscala();
+    mostrarPasso(4, true);
+  });
+  $('#a-recomecar').addEventListener('click', () => {
+    if (!confirm('Recomeçar o assistente? A escala gerada continua salva até você gerar outra.')) return;
+    estado.assist = assistPadrao();
+    salvar();
+    preencherSelectsMes();
+    mostrarPasso(1, true);
+  });
+
+  function desenharPronta() {
+    const a = estado.assist;
+    const fase = faseAtual();
+    const ano = a.ano, mes = a.mes;
+    if (estado.rodAno !== ano || estado.rodMes !== mes || !estado.gerado) { gerarEscala(); }
+    if (estado.pessoas.some((p) => p.ciclo) && !estado.rodReparado[chaveMes(ano, mes)]) repararMes(ano, mes);
+
+    // conferência com as validações que o app já tem
+    const problemas = [];
+    estado.pessoas.forEach((p) => {
+      analisarPessoa(p, fase, estado.conv30).avisos.forEach((t) => problemas.push(`${esc(p.nome)}, escala da semana: ${t}`));
+      checarMes(p, ano, mes).problemas.forEach((t) => problemas.push(`${esc(p.nome)}, ${MESES[mes - 1]}: ${t}`));
+    });
+    const falta = faltaDoMes(ano, mes);
+    const avisoFalta = falta.porSemana > 0
+      ? aviso(`Faltam <strong>${pessoasDia(falta.porSemana)}</strong> por semana em ${lista(falta.dias.map((d) => DIAS_NOME[d]))}. <a class="link" href="#reforco">Veja o custo do reforço.</a>`)
+      : '';
+    const notas = [];
+    const t0 = (estado.gerado && estado.gerado.turnos) || [];
+    t0.forEach((t) => {
+      if (Number(t.int) > R.intervaloMaximoSemAcordoMin) notas.push(aviso(`O intervalo do turno é de ${horas(Number(t.int))}, porque o negócio fecha no meio do dia. Intervalo acima de ${horas(R.intervaloMaximoSemAcordoMin)} só vale com acordo escrito ou convenção.`, 'info'));
+    });
+    const status = !problemas.length && !avisoFalta
+      ? aviso('<strong>Escala conferida: nenhum problema.</strong>', 'ok')
+      : `${avisoFalta}${problemas.map((t) => aviso(t)).join('')}`;
+
+    // escala da semana
+    const cont = Array(7).fill(0);
+    const linhas = estado.pessoas.map((p) => `<tr><th scope="row">${esc(p.nome)}${p.turno ? `<small>${esc(p.turno)}</small>` : ''}</th>${p.dias.map((d, i) => {
+      if (d.folga) return '<td class="folga">Folga</td>';
+      cont[i]++;
+      return `<td>${d.ent}<br>${d.sai}</td>`;
+    }).join('')}</tr>`).join('');
+    const semana = `
+      <div class="rolagem"><table class="grade-semana">
+        <caption>Escala da semana · ${t0.map((t) => `${t0.length > 1 ? t.nome + ' ' : ''}${t.ent}–${t.sai}, ${horas(Number(t.int))} de intervalo`).join(' · ')}</caption>
+        <thead><tr><th scope="col">Pessoa</th>${DIAS.map((d, i) => `<th scope="col" class="${i === 6 ? 'dom' : ''}">${d}</th>`).join('')}</tr></thead>
+        <tbody>${linhas}</tbody>
+        <tfoot><tr><th scope="row">Trabalham</th>${cont.map((n, i) => { const pr = necessidadeDia(i); return `<td class="${n < pr ? 'curto' : ''}">${n}${pr ? ` de ${pr}` : ''}</td>`; }).join('')}</tr></tfoot>
+      </table></div>
+      <p class="dica">A escala da semana mostra a primeira semana do rodízio. O domingo de folga gira entre as pessoas.</p>`;
+
+    // rodízio do mês (mural)
+    const isos = diasDoMes(ano, mes);
+    const fers = isos.map((iso) => feriadoEm(iso));
+    const mural = `
+      <div class="rolagem"><table class="mural">
+        <caption>Rodízio de ${mesNome(mes, ano)} · F = folga${fers.some(Boolean) ? ' · ★ = feriado' : ''}</caption>
+        <thead><tr><th scope="col">Pessoa</th>${isos.map((iso, i) => `<th scope="col" class="${dsDe(iso) === 6 ? 'dom' : ''}${fers[i] ? ' fer' : ''}"><span>${DIAS_LETRA[dsDe(iso)]}</span>${i + 1}${fers[i] ? '★' : ''}</th>`).join('')}</tr></thead>
+        <tbody>${estado.pessoas.map((p) => `<tr><th scope="row">${esc(p.nome)}</th>${isos.map((iso) => {
+          const tr = trabalhaEm(p, iso);
+          return `<td class="${tr ? '' : 'folga'}${dsDe(iso) === 6 ? ' dom' : ''}">${tr ? '' : 'F'}</td>`;
+        }).join('')}</tr>`).join('')}</tbody>
+      </table></div>
+      ${textoFeriados(ano, mes)}`;
+
+    // custos
+    const sal = valor(estado.salario);
+    const hora = sal > 0 ? sal / fase.divisor : 0;
+    const custos = `
+      <h3>Custos</h3>
+      <dl class="numeros numeros--2">
+        <div><dt>Valor da hora (${fase.horasSemana}h)</dt><dd>${sal > 0 ? R$(hora) : '–'}</dd><dd class="numeros__conta">${sal > 0 ? `${R$(sal)} ÷ ${fase.divisor}` : 'escreva o salário médio no passo 3'}</dd></div>
+        <div><dt>Hora extra 50%</dt><dd>${sal > 0 ? R$(hora * (1 + R.horaExtra.adicional)) : '–'}</dd><dd class="numeros__conta">no máximo 2h extras por pessoa por dia</dd></div>
+      </dl>
+      ${falta.porSemana > 0 ? `<h3>Hora extra ou meio período?</h3>${htmlReforco()}<p><a class="link" href="#reforco">Mudar os valores do reforço</a></p>` : ''}`;
+
+    $('#a-pronta').innerHTML = `
+      <ul class="avisos status">${status}${notas.join('')}</ul>
+      <h3>Escala da semana</h3>${semana}
+      <h3>Rodízio de ${mesNome(mes, ano)}</h3>${mural}
+      ${custos}`;
+  }
 
   /* =========================================================
      4. MINHA EQUIPE DÁ CONTA?
@@ -525,20 +1226,10 @@
   function calcularEquipe() {
     const c = contaEquipe();
     const abertos = estado.eqDias.filter((d) => d.aberto).length;
-    let msg;
-    if (c.falta > 0) msg = aviso(`Falta cobrir <strong>${c.falta} ${c.falta === 1 ? 'turno' : 'turnos'}</strong> por semana: reorganizar a escala, pagar hora extra ou contratar reforço.`);
-    else if (c.falta < 0) msg = aviso(`A equipe dá conta e sobram ${-c.falta} ${-c.falta === 1 ? 'turno' : 'turnos'} por semana para cobrir férias e faltas.`, 'ok');
-    else msg = aviso('A equipe dá conta certinho, sem sobra para cobrir férias e faltas.', 'ok');
-    $('#q-resultado').innerHTML = `
-      <dl class="numeros">
-        <div><dt>Turnos necessários</dt><dd>${c.necessarios}</dd><dd class="numeros__conta">soma das pessoas nos ${abertos} dias abertos</dd></div>
-        <div><dt>Turnos disponíveis</dt><dd>${c.disponiveis}</dd><dd class="numeros__conta">${c.func} ${c.func === 1 ? 'funcionário' : 'funcionários'} × ${R.equipe.diasPorFuncionario} dias</dd></div>
-        <div><dt>Diferença</dt><dd>${c.falta > 0 ? '−' + c.falta : '+' + (-c.falta)}</dd><dd class="numeros__conta">${c.falta > 0 ? 'turnos faltando' : 'turnos sobrando'}</dd></div>
-      </dl>
-      <ul class="avisos">${msg}</ul>`;
+    $('#q-resultado').innerHTML = htmlConta(c, abertos);
     const usar = $('#f-usar-equipe');
     usar.hidden = c.falta <= 0;
-    usar.textContent = `Usar o resultado de “Minha equipe dá conta?”: ${c.falta} ${c.falta === 1 ? 'turno' : 'turnos'}`;
+    usar.textContent = `Usar o resultado de “Minha equipe dá conta?”: ${pessoasDia(c.falta)}`;
   }
 
   /* =========================================================
@@ -549,17 +1240,15 @@
     if (c.falta > 0) { estado.refTurnos = String(c.falta); preencherCampos(); salvar(); calcularTudo(); }
   });
 
-  function calcularReforco() {
+  function htmlReforco() {
     const fase = faseAtual();
     const turnos = Math.max(0, valor(estado.refTurnos) || 0);
     const hTurno = Math.max(0, valor(estado.refHoras) || 0);
     const sal = valor(estado.salario);
     const meio = valor(estado.refMeio);
     const enc = Math.max(0, valor(estado.refEnc) || 0);
-    const out = $('#f-resultado');
     if (!(sal > 0) || !(meio > 0) || !(turnos > 0) || !(hTurno > 0)) {
-      out.innerHTML = '<p class="vazio">Preencha os turnos, as horas, os dois salários para ver a comparação.</p>';
-      return;
+      return '<p class="vazio">Preencha as pessoas-dia, as horas e os dois salários para ver a comparação.</p>';
     }
     const semanas = R.equipe.semanasPorMes;
     const hSemana = turnos * hTurno;
@@ -572,16 +1261,16 @@
     const avisos = [];
     const limH = R.horaExtra.limiteDiaMin / 60;
     if (hTurno > limH) {
-      const pessoasDia = Math.ceil(hTurno / limH);
-      avisos.push(aviso(`Cada pessoa pode fazer no máximo ${numCurto(limH)}h extras por dia. Para cobrir um turno de ${numCurto(hTurno)}h só com hora extra, são ${pessoasDia} pessoas ficando ${numCurto(limH)}h a mais no mesmo dia.`));
+      const pessoasPorDia = Math.ceil(hTurno / limH);
+      avisos.push(aviso(`Cada pessoa pode fazer no máximo ${numCurto(limH)}h extras por dia. Para cobrir ${numCurto(hTurno)}h de um dia só com hora extra, são ${pessoasPorDia} pessoas ficando ${numCurto(limH)}h a mais no mesmo dia.`));
     }
     if (hSemana > R.equipe.meioPeriodoMaxHorasSemana) {
       avisos.push(aviso(`São ${numCurto(hSemana)}h por semana. Meio período vai até ${R.equipe.meioPeriodoMaxHorasSemana}h por semana: uma pessoa só não cobre tudo.`));
     }
     avisos.push(aviso('A hora extra também aumenta férias, 13º e o repouso da semana. Esse acréscimo não entra nesta conta: confira com seu contador.', 'info'));
 
-    out.innerHTML = `
-      <p class="resultado__base">Buraco na escala: ${numCurto(turnos)} ${turnos === 1 ? 'turno' : 'turnos'} de ${numCurto(hTurno)}h por semana = ${numCurto(hSemana)}h por semana, ou ${num(hMes, 1)}h por mês (${num(semanas, 2)} semanas).</p>
+    return `
+      <p class="resultado__base">Buraco na escala: ${pessoasDia(turnos)} de ${numCurto(hTurno)}h por semana = ${numCurto(hSemana)}h por semana, ou ${num(hMes, 1)}h por mês (${num(semanas, 2)} semanas).</p>
       <div class="comparar">
         <div class="opcao${extraGanha ? ' opcao--melhor' : ''}">
           <h3>Hora extra</h3>
@@ -599,6 +1288,7 @@
       <p class="resultado__frase">${dif < 0.005 ? 'As duas opções custam o mesmo.' : `${extraGanha ? 'Pagar hora extra' : 'Contratar meio período'} sai <strong>${R$(dif)}</strong> mais barato por mês.`} Valor da hora pelas regras de ${fase.horasSemana}h (divisor ${fase.divisor}).</p>
       <ul class="avisos">${avisos.join('')}</ul>`;
   }
+  function calcularReforco() { $('#f-resultado').innerHTML = htmlReforco(); }
 
   /* =========================================================
      6. DESCONTO POR FALTA
@@ -658,6 +1348,10 @@
     calcularEquipe();
     calcularReforco();
     calcularFalta();
+    if (estado.aba === 'inicio') {
+      if (estado.assist.passo === 3) desenharEquipeAssist();
+      if (estado.assist.passo === 4 && document.activeElement && document.activeElement.id === 'a-salario') desenharPronta();
+    }
   }
 
   $('#limpar').addEventListener('click', () => {
@@ -675,7 +1369,8 @@
     desenharEquipe();
     desenharRodizio();
     calcularTudo();
-    abrirAba(ABAS.includes(location.hash.slice(1)) ? location.hash.slice(1) : estado.aba);
+    const rota = location.hash.slice(1);
+    abrirAba(ROTAS.includes(rota) ? rota : estado.aba);
   }
   iniciar();
 })();
