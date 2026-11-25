@@ -486,6 +486,14 @@ a.btn--pri { color: var(--creme); }
 .resposta__frase--ok { background: var(--limao-claro); border: 2px solid var(--limao-escuro); border-radius: var(--r-sm); padding: var(--s-3) var(--s-4); }
 .conta[open] { padding-bottom: var(--s-4); }
 
+/* passo 5: seletor de mês junto do rodízio e destaque ao trocar */
+.campo--mes { max-width: 320px; }
+.base-rodizio { font-size: 16px; font-weight: 700; }
+#a-rodizio-titulo { scroll-margin-top: var(--s-4); border-radius: var(--r-sm); padding: 2px 6px; margin-left: -6px; transition: background-color .3s; }
+#a-rodizio-titulo:focus { outline: none; }
+#a-rodizio-titulo.destaque { background: var(--amarelo); }
+@media (prefers-reduced-motion: reduce) { #a-rodizio-titulo { transition: none; } }
+
 /* passo 2: horário por dia */
 .dias-equipe--horario .dia-eq { flex-wrap: wrap; }
 .dia-eq__horario { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; order: 3; }

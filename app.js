@@ -655,8 +655,8 @@
     for (let a = Math.min(anoHoje, 2026); a <= Math.max(anoHoje, 2026) + 3; a++) anos.push(a);
     [estado.rodAno, estado.assist.ano].forEach((a) => { if (!anos.includes(a)) anos.push(a); });
     const opAno = anos.sort().map((a) => `<option value="${a}">${a}</option>`).join('');
-    $('#r-mes').innerHTML = opMes; $('#a-mes').innerHTML = opMes;
-    $('#r-ano').innerHTML = opAno; $('#a-ano').innerHTML = opAno;
+    $('#r-mes').innerHTML = opMes;
+    $('#r-ano').innerHTML = opAno;
   }
 
   function textoRegrasDoMes(ano, mes) {
@@ -691,7 +691,7 @@
     const ano = estado.rodAno;
     const mes = estado.rodMes;
     const key = chaveMes(ano, mes);
-    if (estado.pessoas.some((p) => p.ciclo) && !estado.rodReparado[key]) { repararMes(ano, mes); salvar(); }
+    if (estado.pessoas.some((p) => p.ciclo) && !estado.rodReparado[key]) { repararAte(ano, mes); salvar(); }
     const vazio = dsDe(isoDe(ano, mes, 1));
     const automatico = estado.pessoas.some((p) => p.ciclo);
     $('#r-intro').textContent = automatico
@@ -971,7 +971,13 @@
     const minimo = minimoFolgasMes(ano, mes);
     const LIM = R.descanso.maxDiasSeguidos - 1;
     const aberto = (iso) => { const d = estado.eqDias[dsDe(iso)]; return !d || d.aberto; };
-    const sobra = (iso) => estado.pessoas.filter((q) => trabalhaEm(q, iso)).length - necessidadeDia(dsDe(iso));
+    // Sobra de gente no dia, no turno da pessoa (com manhã e tarde, tirar alguém da manhã não pode deixar a manhã curta).
+    const sobra = (iso, p) => {
+      const ds = dsDe(iso);
+      const nec = estado.necTurno && p && p.turno && estado.necTurno[p.turno];
+      if (nec) return estado.pessoas.filter((q) => q.turno === p.turno && trabalhaEm(q, iso)).length - (nec[ds] || 0);
+      return estado.pessoas.filter((q) => trabalhaEm(q, iso)).length - necessidadeDia(ds);
+    };
     const folgasNoMes = (p, a, m) => diasDoMes(a, m).filter((iso) => !trabalhaEm(p, iso)).length;
 
     const bordas = [];
@@ -1001,7 +1007,7 @@
               if (!trabalhaEm(p, t) || !aberto(t)) continue;
               definirAuto(p, f, true); definirAuto(p, t, false);
               const ok = maiorSequencia(p, addDias(first, -14), addDias(last, 14)) <= LIM && folgasNoMes(p, ...b.outro) >= minOutro;
-              const nota = sobra(t) + 0.5;
+              const nota = sobra(t, p) + 0.5;
               definirAuto(p, f, false); definirAuto(p, t, true);
               if (ok && (!melhor || nota > melhor.nota)) melhor = { nota, f, t };
             }
@@ -1010,7 +1016,7 @@
         for (const t of isos) {
           if (!trabalhaEm(p, t) || !aberto(t)) continue;
           definirAuto(p, t, false);
-          const nota = sobra(t);
+          const nota = sobra(t, p);
           definirAuto(p, t, true);
           if (!melhor || nota > melhor.nota) melhor = { nota, t };
         }
@@ -1024,6 +1030,18 @@
   }
 
   // Gera e grava a escala com o número de pessoas escolhido no passo 4 e atualiza a tela.
+  /* Ajusta os meses em ordem, do primeiro mês gerado até o pedido, para cada mês considerar o anterior
+     já ajustado. O ciclo não recomeça: trocar de mês só continua a mesma rotação. */
+  function repararAte(ano, mes) {
+    if (!estado.pessoas.some((p) => p.ciclo)) return;
+    const ini = estado.cicloMes0 || { ano, mes };
+    let [a, m] = ano * 12 + mes < ini.ano * 12 + ini.mes ? [ano, mes] : [ini.ano, ini.mes];
+    while (a * 12 + m <= ano * 12 + mes) {
+      if (!estado.rodReparado[chaveMes(a, m)]) repararMes(a, m);
+      [a, m] = mesVizinho(a, m, 1);
+    }
+  }
+
   function gerarEscala() {
     const a = estado.assist;
     montarEscala(inteiro(a.nGerar || a.func, 1, R.maxPessoasNaEscala));
@@ -1062,6 +1080,7 @@
     estado.rodReparado = {};
     estado.rodMes = a.mes;
     estado.rodAno = a.ano;
+    estado.cicloMes0 = { ano: a.ano, mes: a.mes }; // o ciclo começa aqui e continua igual nos meses seguintes
     estado.atividade = a.atividade;
     estado.necTurno = {};
     r.grupos.forEach((g) => { estado.necTurno[g.turno.nome] = g.need.slice(); });
@@ -1194,7 +1213,7 @@
     else a[k] = el.value;
     preencherCampos(el);
     salvar();
-    if ((k === 'mes' || k === 'ano') && tipo === 'change') { gerarEscala(); desenharPronta(); return; }
+    if ((k === 'mes' || k === 'ano') && tipo === 'change') { desenharPronta(); return; }
     if (k === 'pausa') $('#a-pausa-campos').hidden = !a.pausa;
     mostrarPerguntaAcordo();
     if (k === 'func') { desenharNomes(); validarFunc(false); }
@@ -1510,12 +1529,46 @@
     mostrarPasso(1, true);
   });
 
+  /* Meses do seletor do passo 5: os próximos 13, a partir de dezembro/2026, do mês atual se for depois,
+     ou do mês em que começa a regra escolhida (40h: dezembro/2027). Nunca antes de dezembro/2026. */
+  function opcoesMes() {
+    const [ah, mh] = hojeISO().split('-').map(Number);
+    const ini = faseAtual().inicio;
+    const cand = [[2026, 12], [ah, mh]];
+    if (ini) cand.push(ini.split('-').slice(0, 2).map(Number));
+    let [y, m] = cand.reduce((x, c) => (c[0] * 12 + c[1] > x[0] * 12 + x[1] ? c : x));
+    const lista = [];
+    for (let i = 0; i < 13; i++) { lista.push([y, m]); [y, m] = mesVizinho(y, m, 1); }
+    return lista;
+  }
+  $('#a-pronta').addEventListener('change', (ev) => {
+    if (ev.target.id !== 'a-mesano') return;
+    const [y, m] = ev.target.value.split('-').map(Number);
+    const a = estado.assist;
+    a.ano = y; a.mes = m;
+    salvar();
+    desenharPronta();
+    const sel = $('#a-mesano');
+    if (sel) sel.focus({ preventScroll: true });
+    const titulo = $('#a-rodizio-titulo');
+    const suave = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    titulo.scrollIntoView({ behavior: suave ? 'smooth' : 'auto', block: 'start' });
+    titulo.classList.add('destaque');
+    setTimeout(() => titulo.classList.remove('destaque'), 1000);
+  });
+
   function desenharPronta() {
     const a = estado.assist;
     const fase = faseAtual();
+    const lista = opcoesMes();
+    if (!lista.some(([y, m]) => y === a.ano && m === a.mes)) { [a.ano, a.mes] = lista[0]; }
     const ano = a.ano, mes = a.mes;
-    if (estado.rodAno !== ano || estado.rodMes !== mes || !estado.gerado) { gerarEscala(); }
-    if (estado.pessoas.some((p) => p.ciclo) && !estado.rodReparado[chaveMes(ano, mes)]) repararMes(ano, mes);
+    // Só gera se ainda não existe escala. Trocar o mês apenas continua o mesmo ciclo.
+    if (!estado.gerado) gerarEscala();
+    estado.rodMes = mes;
+    estado.rodAno = ano;
+    repararAte(ano, mes);
+    salvar();
 
     // conferência com as validações que o app já tem
     const problemas = [];
@@ -1551,7 +1604,8 @@
         <tbody>${linhas}</tbody>
         <tfoot class="so-tela"><tr><th scope="row">Trabalham</th>${cont.map((n, i) => { const pr = necessidadeDia(i); return `<td class="${n < pr ? 'curto' : ''}">${n}${pr ? ` de ${pr}` : ''}</td>`; }).join('')}</tr></tfoot>
       </table></div>
-      <p class="legenda">Horário mais comum · ${legendaTurnos}. A tabela mostra a primeira semana; o domingo de folga gira entre as pessoas.</p>`;
+      <p class="legenda">Horário mais comum · ${legendaTurnos}.</p>
+      <p class="base-rodizio">A escala da semana é a base. O rodízio do mês mostra quem folga em cada dia, girando o domingo.</p>`;
 
     // rodízio do mês (mural)
     const isos = diasDoMes(ano, mes);
@@ -1584,7 +1638,11 @@
       <section class="mural-impressao" aria-label="Escala para o mural">
         <p class="so-impressao mural-impressao__titulo">Escala ${nomeNeg ? `· ${esc(nomeNeg)} ` : ''}· ${mesNome(mes, ano)} · regras de ${fase.horasSemana}h</p>
         <h3>Escala da semana</h3>${semana}
-        <h3>Rodízio de ${mesNome(mes, ano)}</h3>
+        <div class="campo campo--mes so-tela">
+          <label for="a-mesano">Mês do rodízio</label>
+          <select id="a-mesano">${opcoesMes().map(([y, m]) => `<option value="${y}-${pad(m)}"${y === ano && m === mes ? ' selected' : ''}>${mesNome(m, y)}</option>`).join('')}</select>
+        </div>
+        <h3 id="a-rodizio-titulo" tabindex="-1">Rodízio de ${mesNome(mes, ano)}</h3>
         <div class="so-tela">${textoTransicao(ano, mes)}</div>
         ${mural}
       </section>
