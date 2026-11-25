@@ -52,6 +52,16 @@
     return h * 60 + m;
   };
   const hhmm = (m) => { m = ((Math.round(m) % 1440) + 1440) % 1440; return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
+  const piso15 = (m) => Math.floor(m / 15) * 15;
+  const teto15 = (m) => Math.ceil(m / 15) * 15;
+  // Lê horas escritas como 8h24, 8:24, 8 ou 8,4. Devolve em horas (8h24 = 8,4).
+  function lerHoras(s) {
+    const t = String(s ?? '').trim().toLowerCase();
+    const m = t.match(/^(\d{1,3})\s*[h:]\s*(\d{1,2})?\s*(min)?$/);
+    if (m) return Number(m[1]) + (m[2] ? Number(m[2]) / 60 : 0);
+    return valor(t);
+  }
+  const DIAS_COMPLETO = ['segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo'];
 
   /* ---------- datas (sem fuso: tudo em UTC) ---------- */
   const DIA_MS = 86400000;
@@ -122,7 +132,7 @@
       passo: 1,
       negocio: null,
       abre: '08:00', fecha: '17:00', turnos: '1',
-      pausa: false, pausaIni: '15:00', pausaFim: '18:00',
+      pausa: false, pausaIni: '15:00', pausaFim: '18:00', acordoIntervalo: false,
       atividade: 'comercio',
       dias: DIAS.map((_, i) => ({ aberto: i < 5, pessoas: '2' })),
       func: '3',
@@ -151,6 +161,7 @@
       refTurnos: '1',
       refHoras: '8',
       refMeio: '1.800,00',
+      refHoraValor: '',
       refEnc: '',
       fTipo: 'mensalista',
       fHora: '10,00',
@@ -307,7 +318,7 @@
     erro.textContent = estado.salario && !ok ? 'Escreva o salário só com números, por exemplo 3.000,00.' : '';
     $('#h-salario').setAttribute('aria-invalid', String(!!erro.textContent));
     const qtd = Number.isFinite(x) && x > 0 ? x : 0;
-    $('#h-col-x').textContent = `${numCurto(qtd)} ${qtd === 1 ? 'hora extra' : 'horas extras'} no mês (50%)`;
+    $('#h-col-x').textContent = `${horas(qtd * 60)} extras no mês (50%)`;
     const atual = faseAtual();
     const ad = R.horaExtra;
     $('#h-tabela tbody').innerHTML = R.fases.map((f) => {
@@ -318,7 +329,7 @@
         <td data-rot="Hora normal">${ok ? R$(h) : '–'}</td>
         <td data-rot="Hora extra 50%">${ok ? R$(h * (1 + ad.adicional)) : '–'}</td>
         <td data-rot="Hora extra 100%">${ok ? R$(h * (1 + ad.adicionalDobro)) : '–'}</td>
-        <td data-rot="${numCurto(qtd)} h extras no mês">${ok ? R$(h * (1 + ad.adicional) * qtd) : '–'}</td>
+        <td data-rot="${horas(qtd * 60)} extras no mês">${ok ? R$(h * (1 + ad.adicional) * qtd) : '–'}</td>
       </tr>`;
     }).join('');
   }
@@ -391,11 +402,13 @@
     const abre = (a.negocio && paraMin(a.abre)) ?? paraMin(T.manhaInicio);
     const fecha = (a.negocio && paraMin(a.fecha)) ?? paraMin(T.tardeFim);
     const integral = paraMin(T.integralInicio);
-    const int = String(T.intervaloMin);
+    const lim = fase.limiteDiaMin;
+    const t = (nome, ini, fim) => { const x = montarTurno(nome, ini, fim, T.intervaloMin, lim, 'cheio'); return { nome, ent: x.ent, sai: x.sai, int: x.int }; };
+    const fechaR = piso15(fecha);
     return [
-      { nome: 'Manhã', ent: hhmm(abre), sai: hhmm(abre + pres), int },
-      { nome: 'Tarde', ent: hhmm(fecha - pres), sai: hhmm(fecha), int },
-      { nome: 'Integral', ent: hhmm(integral), sai: hhmm(integral + pres), int }
+      t('Manhã', abre, teto15(abre) + pres),
+      t('Tarde', fechaR - pres, fechaR),
+      t('Integral', integral, teto15(integral) + pres)
     ];
   }
 
@@ -406,7 +419,7 @@
       <article class="pessoa" data-p="${pi}">
         <div class="pessoa__cab">
           <div class="campo campo--nome">
-            <label for="e-nome-${p.id}">Nome${p.turno ? ` <span class="pessoa__turno">turno da ${p.turno.toLowerCase()}</span>` : ''}</label>
+            <label for="e-nome-${p.id}">Nome${p.turno ? ` <span class="pessoa__turno">turno: ${esc(p.turno)}</span>` : ''}</label>
             <input id="e-nome-${p.id}" data-pf="nome" value="${esc(p.nome)}" autocomplete="off">
           </div>
           <div class="prontos" role="group" aria-label="Turnos prontos para ${esc(p.nome)}">
@@ -599,14 +612,13 @@
 
     const problemas = [];
     const oks = [];
-    if (folgas >= minimo) oks.push(`${folgas} folgas no mês. O mínimo é ${minimo}.`);
-    else problemas.push(`Só ${folgas} folgas no mês. O mínimo é ${minimo}: faltam ${minimo - folgas}.`);
+    if (folgas >= minimo) oks.push(`${plural(folgas, 'folga', 'folgas')} no mês. O mínimo é ${minimo}.`);
+    else problemas.push(`Só ${plural(folgas, 'folga', 'folgas')} no mês. O mínimo é ${minimo}: ${minimo - folgas === 1 ? 'falta 1' : `faltam ${minimo - folgas}`}.`);
     if (maior > R.descanso.maxDiasSeguidos) problemas.push(`${maior} dias seguidos de trabalho (${trecho()}). O máximo é ${R.descanso.maxDiasSeguidos}.`);
     else if (maior === R.descanso.maxDiasSeguidos) problemas.push(`${maior} dias seguidos de trabalho (${trecho()}). Só vale com regime de compensação previsto na convenção.`);
-    else oks.push(`No máximo ${maior} dias seguidos de trabalho.`);
+    else oks.push(`No máximo ${plural(maior, 'dia seguido', 'dias seguidos')} de trabalho.`);
     if (semDomingo) problemas.push(`Trabalha ${janela} domingos seguidos (dias ${semDomingo.map((d) => d.dia).join(', ')}). ${estado.atividade === 'comercio' ? 'No comércio' : 'Nesta atividade'}, a folga tem que cair no domingo pelo menos 1 vez a cada ${janela} semanas.`);
-    else if (doms.length) oks.push(`${domFolga} de ${doms.length} domingos de folga.`);
-    return { dias, folgas, minimo, maior, problemas, oks };
+    else if (doms.length) oks.push(`${domFolga} de ${doms.length} domingos de folga.`);    return { dias, folgas, minimo, maior, problemas, oks };
   }
 
   function preencherSelectsMes() {
@@ -631,6 +643,17 @@
     return `<p><strong>${maiuscula(mesNome(mes, ano))}</strong> tem ${nDias} dias. ${regras} cada pessoa precisa de pelo menos <strong>${minimo} folgas</strong> no mês e de uma folga no domingo a cada ${janela} semanas${estado.atividade === 'comercio' ? ' (comércio)' : ''}.</p>`;
   }
 
+  // Mês em que a regra muda (dezembro/2026, dezembro/2027): aviso acima do rodízio.
+  function textoTransicao(ano, mes) {
+    const fases = fasesDoMes(ano, mes);
+    if (fases.length < 2) return '';
+    const nova = fases[1].de;
+    const ds = dsDe(nova);
+    return `<p class="transicao">Até ${diaMesBR(fases[0].ate)} sua escala atual pode continuar. A nova regra começa ${ds >= 5 ? 'no' : 'na'} ${DIAS_COMPLETO[ds]}, ${dataBR(nova)}.</p>`;
+  }
+
+  const textoFalta = (f) => `${f.porSemana === 1 ? 'Falta' : 'Faltam'} <strong>${pessoasDia(f.porSemana)}</strong> por semana em ${lista(f.dias.map((d) => DIAS_NOME[d]))}.`;
+
   function textoFeriados(ano, mes) {
     const fer = diasDoMes(ano, mes).map((iso) => ({ iso, nome: feriadoEm(iso) })).filter((f) => f.nome);
     if (!fer.length) return '';
@@ -648,7 +671,7 @@
       ? 'Este rodízio veio do assistente, com os domingos de folga girando entre as pessoas. Toque num dia para trocar entre trabalho e folga. Os feriados têm uma estrela.'
       : 'O mês começa igual à escala da semana. Toque num dia para trocar entre trabalho e folga. Os domingos ficam em amarelo e os feriados têm uma estrela.';
 
-    $('#r-resumo').innerHTML = textoRegrasDoMes(ano, mes) + textoFeriados(ano, mes);
+    $('#r-resumo').innerHTML = textoTransicao(ano, mes) + textoRegrasDoMes(ano, mes) + textoFeriados(ano, mes);
 
     $('#r-pessoas').innerHTML = estado.pessoas.map((p) => {
       const c = checarMes(p, ano, mes);
@@ -698,35 +721,70 @@
      ========================================================= */
 
   // Horário de cada turno do negócio, dentro do limite diário da fase.
+  const intPara = (pres) => {
+    for (const i of [0, 15, 60]) { const t = pres - i; if (t > 0 && i >= intervaloMinimo(t, false)) return i; }
+    return 60;
+  };
+
+  /* Monta um turno com horários em múltiplos de 15 min: a entrada sobe, a saída desce,
+     o intervalo sobe, e a saída recua até o trabalho caber no limite diário da fase.
+     divisao: 'metade' (manhã e tarde dividem a necessidade do dia) ou 'cheio' (cada turno precisa da equipe toda). */
+  function montarTurno(nome, ini, fim, int, lim, divisao) {
+    const e = teto15(ini);
+    let s = piso15(fim);
+    let i = int > 0 ? teto15(int) : 0;
+    for (let guarda = 0; guarda < 200; guarda++) {
+      const liq = s - e - i;
+      const minimo = intervaloMinimo(liq, false);
+      if (i < minimo) { i = teto15(minimo); continue; }
+      if (liq > lim) { s -= 15; continue; }
+      break;
+    }
+    return { nome, ent: hhmm(e), sai: hhmm(s), int: String(i), liq: s - e - i, divisao };
+  }
+
+  // Intervalo que um turno único teria quando o negócio fecha no meio do dia (ou null).
+  function intervaloDaPausa(neg, fase) {
+    if (!neg.pausa) return null;
+    const abre = paraMin(neg.abre) ?? 480;
+    let fecha = paraMin(neg.fecha) ?? 1020;
+    if (fecha <= abre) fecha += 1440;
+    const pi = paraMin(neg.pausaIni);
+    const pf = paraMin(neg.pausaFim);
+    if (pi == null || pf == null || pf <= pi || pi <= abre || pf >= fecha) return null;
+    return { abre, fecha, pi, pf, int: teto15(Math.max(pf - pi, fecha - abre - fase.limiteDiaMin)) };
+  }
+
+  // Horário de cada turno do negócio, dentro do limite diário da fase.
   function turnosDoNegocio(neg, fase) {
     const lim = fase.limiteDiaMin;
     const abre = paraMin(neg.abre) ?? 480;
-    const fecha = paraMin(neg.fecha) ?? 1020;
-    let span = fecha - abre;
-    if (span <= 0) span += 1440;
-    const intPara = (pres) => {
-      for (const i of [0, 15, 60]) { const t = pres - i; if (t > 0 && i >= intervaloMinimo(t, false)) return i; }
-      return 60;
-    };
-    const mk = (nome, ini, pres, int) => ({ nome, ent: hhmm(ini), sai: hhmm(ini + pres), int: String(int), liq: pres - int });
-    if (Number(neg.turnos) === 2) {
-      let pres = Math.min(span, lim + 60);
-      const int = intPara(pres);
-      if (pres - int > lim) pres = lim + int;
-      return [mk('Manhã', abre, pres, int), mk('Tarde', abre + span - pres, pres, int)];
-    }
-    if (neg.pausa) {
-      const p = (paraMin(neg.pausaFim) ?? 0) - (paraMin(neg.pausaIni) ?? 0);
-      if (p > 0 && p < span) {
-        const int = Math.max(p, span - lim);
-        return [mk('Integral', abre, span, int)];
+    let fecha = paraMin(neg.fecha) ?? 1020;
+    if (fecha <= abre) fecha += 1440;
+    const span = fecha - abre;
+    const pausa = intervaloDaPausa(neg, fase);
+    if (pausa) {
+      if (pausa.int > R.intervaloMaximoSemAcordoMin && !neg.acordoIntervalo) {
+        return [
+          montarTurno('Almoço', abre, pausa.pi, intPara(pausa.pi - abre), lim, 'cheio'),
+          montarTurno('Jantar', pausa.pf, fecha, intPara(fecha - pausa.pf), lim, 'cheio')
+        ];
       }
+      return [montarTurno('Integral', abre, fecha, pausa.int, lim, 'cheio')];
     }
-    let int = intPara(span);
-    let pres = span;
-    if (pres - int > lim) { int = 60; pres = lim + 60; }
-    return [mk('Integral', abre, pres, int)];
+    if (Number(neg.turnos) === 2) {
+      const pres = Math.min(span, lim + 60);
+      const int = intPara(pres);
+      return [
+        montarTurno('Manhã', abre, abre + pres, int, lim, 'metade'),
+        montarTurno('Tarde', fecha - pres, fecha, int, lim, 'metade')
+      ];
+    }
+    const int = intPara(span);
+    if (span - int > lim) return [montarTurno('Integral', abre, abre + lim + 60, 60, lim, 'cheio')];
+    return [montarTurno('Integral', abre, fecha, int, lim, 'cheio')];
   }
+  const necessidadeDoTurno = (n, turno) => (!turno || turno.divisao !== 'metade' ? n : turno.nome === 'Manhã' ? Math.ceil(n / 2) : Math.floor(n / 2));
 
   const combinacoes = (arr, k) => (k <= 0 ? [[]] : arr.flatMap((x, i) => combinacoes(arr.slice(i + 1), k - 1).map((c) => [x, ...c])));
   const mascara = (dias) => { const m = Array(7).fill(false); dias.forEach((d) => { m[d] = true; }); return m; };
@@ -811,8 +869,8 @@
       const r = gerarCiclo(n, need, aberto, P);
       return { turnos, grupos: [{ turno: turnos[0], ciclos: r.ciclos, falta: r.falta, need }] };
     }
-    const needM = need.map((x) => Math.ceil(x / 2));
-    const needT = need.map((x) => Math.floor(x / 2));
+    const needM = need.map((x) => necessidadeDoTurno(x, turnos[0]));
+    const needT = need.map((x) => necessidadeDoTurno(x, turnos[1]));
     const totalM = needM.reduce((s, x) => s + x, 0);
     const totalT = needT.reduce((s, x) => s + x, 0);
     let melhor = null;
@@ -907,6 +965,7 @@
         id: novoId(),
         nome: (a.nomes[i] || '').trim() || `Pessoa ${i + 1}`,
         turno: r.turnos.length > 1 ? g.turno.nome : null,
+        divisao: g.turno.divisao,
         dias: DIAS.map((_, d) => ({ folga: ciclo[0][d], ent: g.turno.ent, sai: g.turno.sai, int: g.turno.int })),
         ciclo,
         cicloInicio: inicio
@@ -926,7 +985,7 @@
     const falta = faltaDoMes(a.ano, a.mes);
     if (falta.porSemana > 0) {
       estado.refTurnos = String(falta.porSemana);
-      estado.refHoras = numCurto(r.turnos[0].liq / 60);
+      estado.refHoras = horas(r.turnos[0].liq);
     }
     salvar();
     preencherCampos();
@@ -936,9 +995,10 @@
   // Cobertura do mês: semana a semana, por turno quando há manhã e tarde.
   function faltaDoMes(ano, mes) {
     const isos = diasDoMes(ano, mes);
-    const doisTurnos = estado.pessoas.some((p) => p.turno);
-    const grupos = doisTurnos ? ['Manhã', 'Tarde'] : [null];
-    const precisa = (ds, g) => { const n = necessidadeDia(ds); return g === 'Manhã' ? Math.ceil(n / 2) : g === 'Tarde' ? Math.floor(n / 2) : n; };
+    const nomes = [...new Set(estado.pessoas.map((p) => p.turno).filter(Boolean))];
+    const grupos = nomes.length ? nomes : [null];
+    const divisao = (g) => (estado.pessoas.find((p) => p.turno === g) || {}).divisao;
+    const precisa = (ds, g) => necessidadeDoTurno(necessidadeDia(ds), g ? { nome: g, divisao: divisao(g) } : null);
     const semanas = new Map();
     const dias = new Set();
     for (const iso of isos) {
@@ -967,6 +1027,7 @@
       pausa: !!m.pausa,
       pausaIni: m.pausa ? m.pausa[0] : '15:00',
       pausaFim: m.pausa ? m.pausa[1] : '18:00',
+      acordoIntervalo: false,
       atividade: m.atividade,
       dias: m.dias.map((x, i) => ({ aberto: !!x, pessoas: String(m.pessoas[i]) }))
     });
@@ -983,6 +1044,7 @@
     salvar();
     if ((k === 'mes' || k === 'ano') && tipo === 'change') { gerarEscala(); desenharPronta(); return; }
     if (k === 'pausa') $('#a-pausa-campos').hidden = !a.pausa;
+    mostrarPerguntaAcordo();
     if (k === 'func') { desenharNomes(); validarFunc(false); }
     desenharEquipeAssist();
   }
@@ -993,6 +1055,16 @@
     $('#a-form').hidden = !estado.assist.negocio;
     $('#a-p2-seguir').disabled = !estado.assist.negocio;
     $('#a-pausa-campos').hidden = !estado.assist.pausa;
+    mostrarPerguntaAcordo();
+  }
+  // Pausa que daria intervalo maior que 2h: pergunta pelo acordo; sem ele, a escala usa Almoço e Jantar.
+  function mostrarPerguntaAcordo() {
+    const p = intervaloDaPausa(estado.assist, faseAtual());
+    const longo = !!p && p.int > R.intervaloMaximoSemAcordoMin;
+    $('#a-acordo').hidden = !longo;
+    if (longo) {
+      $('#a-acordo-txt').textContent = `Com um turno só, o intervalo ficaria com ${horas(p.int)}. Acima de ${horas(R.intervaloMaximoSemAcordoMin)}, só com acordo escrito ou convenção. Sem isso, a escala usa dois turnos: Almoço e Jantar.`;
+    }
   }
   function desenharDiasAssist() {
     $('#a-dias').innerHTML = estado.assist.dias.map((d, i) => `
@@ -1056,24 +1128,59 @@
 
   function htmlConta(c, abertos) {
     let msg;
-    if (c.falta > 0) msg = aviso(`Falta cobrir <strong>${pessoasDia(c.falta)}</strong> por semana: reorganizar a escala, pagar hora extra ou contratar reforço.`);
-    else if (c.falta < 0) msg = aviso(`A equipe dá conta e sobram ${pessoasDia(-c.falta)} por semana para cobrir férias e faltas.`, 'ok');
+    if (c.falta > 0) msg = aviso(`${c.falta === 1 ? 'Falta' : 'Faltam'} <strong>${pessoasDia(c.falta)}</strong> por semana: reorganizar a escala, estender a jornada ou contratar reforço.`);
+    else if (c.falta < 0) msg = aviso(`A equipe dá conta e ${c.falta === -1 ? 'sobra' : 'sobram'} ${pessoasDia(-c.falta)} por semana para cobrir férias e faltas.`, 'ok');
     else msg = aviso('A equipe dá conta certinho, sem sobra para cobrir férias e faltas.', 'ok');
     return `
       <dl class="numeros">
         <div><dt>Pessoas-dia necessárias</dt><dd>${c.necessarios}</dd><dd class="numeros__conta">soma das pessoas nos ${abertos} dias abertos</dd></div>
         <div><dt>Pessoas-dia disponíveis</dt><dd>${c.disponiveis}</dd><dd class="numeros__conta">${c.func} ${c.func === 1 ? 'funcionário' : 'funcionários'} × ${R.equipe.diasPorFuncionario} dias</dd></div>
-        <div><dt>Diferença</dt><dd>${c.falta > 0 ? '−' + c.falta : '+' + (-c.falta)}</dd><dd class="numeros__conta">${c.falta > 0 ? 'pessoas-dia faltando' : 'pessoas-dia sobrando'}</dd></div>
+        <div><dt>Diferença</dt><dd>${c.falta > 0 ? '−' + c.falta : '+' + (-c.falta)}</dd><dd class="numeros__conta">${Math.abs(c.falta) === 1 ? 'pessoa-dia' : 'pessoas-dia'} ${c.falta > 0 ? 'faltando' : 'sobrando'}</dd></div>
       </dl>
       <p class="dica">1 pessoa-dia = 1 pessoa trabalhando 1 dia.</p>
       <ul class="avisos">${msg}</ul>`;
+  }
+
+  /* Prevê, antes de gerar, o que o passo 4 vai mostrar: roda o mesmo gerador (sem salvar nada)
+     e confere quantas pessoas podem trabalhar no domingo respeitando o rodízio obrigatório. */
+  function previsaoAssist() {
+    const a = estado.assist;
+    const n = inteiro(a.func, 1, R.maxPessoasNaEscala);
+    const fase = faseAtual();
+    const domAberto = a.dias[6].aberto;
+    const P = domAberto ? (R.descanso.domingoACadaSemanas[a.atividade] || R.descanso.domingoACadaSemanas.outras) : 1;
+    const r = gerarNegocio(a, n, fase, P);
+    const porSemana = Array.from({ length: P }, (_, w) => r.grupos.reduce((s, g) => s + g.falta[w].reduce((x, y) => x + y, 0), 0));
+    const dias = [...new Set(r.grupos.flatMap((g) => g.falta.flatMap((sem) => sem.map((f, d) => (f > 0 ? d : -1)))))].filter((d) => d >= 0).sort((x, y) => x - y);
+    // domingo: no rodízio, numa semana ruim só trabalham m − ⌈m/P⌉ das m pessoas de um turno
+    let domingoCurto = false;
+    const precisaDom = domAberto ? Math.max(0, Math.round(valor(a.dias[6].pessoas) || 0)) : 0;
+    if (precisaDom > 0) {
+      const cabe = (m) => m - Math.ceil(m / P);
+      if (r.turnos.length === 1) domingoCurto = cabe(n) < precisaDom;
+      else {
+        const nA = necessidadeDoTurno(precisaDom, r.turnos[0]);
+        const nB = necessidadeDoTurno(precisaDom, r.turnos[1]);
+        domingoCurto = true;
+        for (let k = 1; k < n; k++) if (cabe(k) >= nA && cabe(n - k) >= nB) { domingoCurto = false; break; }
+      }
+      if (r.grupos.some((g) => g.falta.some((sem) => sem[6] > 0))) domingoCurto = true;
+    }
+    return { porSemana: Math.max(0, ...porSemana), dias, domingoCurto, turnos: r.turnos };
   }
 
   function desenharEquipeAssist() {
     if (estado.aba !== 'inicio') return;
     const c = contaAssist();
     const abertos = estado.assist.dias.filter((d) => d.aberto).length;
-    $('#a-equipe').innerHTML = `<h3>Sua equipe dá conta?</h3>${htmlConta(c, abertos)}${c.falta > 0 ? '<p class="resultado__frase">Dá para gerar a escala mesmo assim: ela mostra em que dias falta gente e quanto custa o reforço.</p>' : ''}`;
+    const pv = previsaoAssist();
+    const extras = [];
+    if (pv.domingoCurto) extras.push(aviso('No domingo pode faltar gente em algumas semanas por causa do rodízio obrigatório de domingos.'));
+    if (pv.porSemana > 0 && pv.porSemana !== Math.max(0, c.falta)) {
+      const porque = pv.turnos.length > 1 ? `Com cada pessoa fixa no seu turno (${pv.turnos.map((t) => t.nome.toLowerCase()).join(' ou ')}) e o rodízio de domingos` : 'Com o rodízio de domingos e 2 folgas por semana';
+      extras.push(aviso(`${porque}, na escala gerada: ${textoFalta(pv)}`));
+    }
+    $('#a-equipe').innerHTML = `<h3>Sua equipe dá conta?</h3>${htmlConta(c, abertos)}${extras.length ? `<ul class="avisos">${extras.join('')}</ul>` : ''}${c.falta > 0 || pv.porSemana > 0 ? '<p class="resultado__frase">Dá para gerar a escala mesmo assim: ela mostra em que dias falta gente e quanto custa cobrir.</p>' : ''}`;
   }
 
   function mostrarPasso(n, focar) {
@@ -1133,14 +1240,13 @@
       checarMes(p, ano, mes).problemas.forEach((t) => problemas.push(`${esc(p.nome)}, ${MESES[mes - 1]}: ${t}`));
     });
     const falta = faltaDoMes(ano, mes);
-    const avisoFalta = falta.porSemana > 0
-      ? aviso(`Faltam <strong>${pessoasDia(falta.porSemana)}</strong> por semana em ${lista(falta.dias.map((d) => DIAS_NOME[d]))}. <a class="link" href="#reforco">Veja o custo do reforço.</a>`)
-      : '';
+    const avisoFalta = falta.porSemana > 0 ? aviso(`${textoFalta(falta)} <a class="link" href="#reforco">Veja o custo do reforço.</a>`) : '';
     const notas = [];
     const t0 = (estado.gerado && estado.gerado.turnos) || [];
     t0.forEach((t) => {
-      if (Number(t.int) > R.intervaloMaximoSemAcordoMin) notas.push(aviso(`O intervalo do turno é de ${horas(Number(t.int))}, porque o negócio fecha no meio do dia. Intervalo acima de ${horas(R.intervaloMaximoSemAcordoMin)} só vale com acordo escrito ou convenção.`, 'info'));
+      if (Number(t.int) > R.intervaloMaximoSemAcordoMin) notas.push(aviso(`O intervalo do turno é de ${horas(Number(t.int))}, porque o negócio fecha no meio do dia. Vale porque você marcou que tem acordo escrito ou convenção que permite intervalo maior que ${horas(R.intervaloMaximoSemAcordoMin)}.`, 'info'));
     });
+    if (t0.some((t) => t.nome === 'Almoço')) notas.push(aviso(`Sem acordo para intervalo maior que ${horas(R.intervaloMaximoSemAcordoMin)}, a escala usa dois turnos separados: Almoço e Jantar. Cada pessoa fica sempre no seu turno.`, 'info'));
     const status = !problemas.length && !avisoFalta
       ? aviso('<strong>Escala conferida: nenhum problema.</strong>', 'ok')
       : `${avisoFalta}${problemas.map((t) => aviso(t)).join('')}`;
@@ -1184,12 +1290,12 @@
         <div><dt>Valor da hora (${fase.horasSemana}h)</dt><dd>${sal > 0 ? R$(hora) : '–'}</dd><dd class="numeros__conta">${sal > 0 ? `${R$(sal)} ÷ ${fase.divisor}` : 'escreva o salário médio no passo 3'}</dd></div>
         <div><dt>Hora extra 50%</dt><dd>${sal > 0 ? R$(hora * (1 + R.horaExtra.adicional)) : '–'}</dd><dd class="numeros__conta">no máximo 2h extras por pessoa por dia</dd></div>
       </dl>
-      ${falta.porSemana > 0 ? `<h3>Hora extra ou meio período?</h3>${htmlReforco()}<p><a class="link" href="#reforco">Mudar os valores do reforço</a></p>` : ''}`;
+      ${falta.porSemana > 0 ? `<h3>Como cobrir o que falta</h3>${htmlReforco()}<p><a class="link" href="#reforco">Mudar os valores do reforço</a></p>` : ''}`;
 
     $('#a-pronta').innerHTML = `
       <ul class="avisos status">${status}${notas.join('')}</ul>
       <h3>Escala da semana</h3>${semana}
-      <h3>Rodízio de ${mesNome(mes, ano)}</h3>${mural}
+      <h3>Rodízio de ${mesNome(mes, ano)}</h3>${textoTransicao(ano, mes)}${mural}
       ${custos}`;
   }
 
@@ -1240,55 +1346,87 @@
     if (c.falta > 0) { estado.refTurnos = String(c.falta); preencherCampos(); salvar(); calcularTudo(); }
   });
 
+  const AVISO_FOLGA = 'Folga não pode ser trocada por dinheiro. Use só em caso excepcional, não como rotina.';
+
+  /* Quatro formas de cobrir as pessoas-dia que faltam. A recomendação só escolhe entre as formas de contratar:
+     chamar na folga é exceção e hora extra só estende jornada (até 2h por pessoa por dia). */
   function htmlReforco() {
     const fase = faseAtual();
-    const turnos = Math.max(0, valor(estado.refTurnos) || 0);
-    const hTurno = Math.max(0, valor(estado.refHoras) || 0);
+    const pd = Math.max(0, valor(estado.refTurnos) || 0);
+    const hDia = Math.max(0, lerHoras(estado.refHoras) || 0);
     const sal = valor(estado.salario);
     const meio = valor(estado.refMeio);
     const enc = Math.max(0, valor(estado.refEnc) || 0);
-    if (!(sal > 0) || !(meio > 0) || !(turnos > 0) || !(hTurno > 0)) {
-      return '<p class="vazio">Preencha as pessoas-dia, as horas e os dois salários para ver a comparação.</p>';
+    if (!(sal > 0) || !(pd > 0) || !(hDia > 0)) {
+      return '<p class="vazio">Preencha as pessoas-dia, as horas de cada pessoa-dia e o salário da equipe para ver a comparação.</p>';
     }
     const semanas = R.equipe.semanasPorMes;
-    const hSemana = turnos * hTurno;
-    const hMes = hSemana * semanas;
-    const hora = sal / fase.divisor;
-    const custoExtra = hMes * hora * (1 + R.horaExtra.adicional);
-    const custoMeio = meio * (1 + enc / 100);
-    const dif = Math.abs(custoExtra - custoMeio);
-    const extraGanha = custoExtra < custoMeio;
-    const avisos = [];
-    const limH = R.horaExtra.limiteDiaMin / 60;
-    if (hTurno > limH) {
-      const pessoasPorDia = Math.ceil(hTurno / limH);
-      avisos.push(aviso(`Cada pessoa pode fazer no máximo ${numCurto(limH)}h extras por dia. Para cobrir ${numCurto(hTurno)}h de um dia só com hora extra, são ${pessoasPorDia} pessoas ficando ${numCurto(limH)}h a mais no mesmo dia.`));
-    }
-    if (hSemana > R.equipe.meioPeriodoMaxHorasSemana) {
-      avisos.push(aviso(`São ${numCurto(hSemana)}h por semana. Meio período vai até ${R.equipe.meioPeriodoMaxHorasSemana}h por semana: uma pessoa só não cobre tudo.`));
-    }
-    avisos.push(aviso('A hora extra também aumenta férias, 13º e o repouso da semana. Esse acréscimo não entra nesta conta: confira com seu contador.', 'info'));
+    const minDia = Math.round(hDia * 60);
+    const minSemana = pd * minDia;
+    const minMes = minSemana * semanas;
+    const hMes = minMes / 60;
+    const horaEquipe = sal / fase.divisor;
+    const horaRef = valor(estado.refHoraValor) > 0 ? valor(estado.refHoraValor) : horaEquipe;
+    const fatorEnc = 1 + enc / 100;
+    const encTxt = enc ? ` + ${numCurto(enc)}% de encargos` : '';
+
+    const custoHora = hMes * horaRef * fatorEnc;
+    const custoMeio = meio > 0 ? meio * fatorEnc : null;
+    const custoExtra = hMes * horaEquipe * (1 + R.horaExtra.adicional);
+    const custoFolga = hMes * horaEquipe * (1 + R.horaExtra.adicionalDobro);
+    const limMin = R.horaExtra.limiteDiaMin;
+    const pessoasExtra = Math.ceil(minDia / limMin);
+
+    const contratar = [{ id: 'hora', nome: 'Contratar reforço por hora', custo: custoHora }];
+    if (custoMeio != null) contratar.push({ id: 'meio', nome: 'Salário fixo de meio período', custo: custoMeio });
+    contratar.sort((a, b) => a.custo - b.custo);
+    const melhor = contratar[0];
+    const outro = contratar[1];
+    const selo = (id) => (id === melhor.id && outro ? '<p class="opcao__selo">Melhor para contratar</p>' : '');
+    const passaMeio = minSemana > R.equipe.meioPeriodoMaxHorasSemana * 60;
+
+    const frase = `Como o buraco se repete toda semana, a saída permanente é contratar. ${melhor.nome} custa <strong>${R$(melhor.custo)}</strong> por mês${outro ? `, ${R$(outro.custo - melhor.custo)} a menos que ${outro.nome.charAt(0).toLowerCase() + outro.nome.slice(1)}` : ''}. Hora extra só serve para estender a jornada de quem já está trabalhando, e chamar alguém na folga é só para exceção.`;
 
     return `
-      <p class="resultado__base">Buraco na escala: ${pessoasDia(turnos)} de ${numCurto(hTurno)}h por semana = ${numCurto(hSemana)}h por semana, ou ${num(hMes, 1)}h por mês (${num(semanas, 2)} semanas).</p>
-      <div class="comparar">
-        <div class="opcao${extraGanha ? ' opcao--melhor' : ''}">
-          <h3>Hora extra</h3>
-          <p class="opcao__valor">${R$(custoExtra)}<span> por mês</span></p>
-          <p class="opcao__conta">${num(hMes, 1)}h × ${R$(hora)} × 1,5</p>
-          ${extraGanha ? '<p class="opcao__selo">Mais barato</p>' : ''}
+      <p class="resultado__base">Buraco na escala: ${pessoasDia(pd)} de ${horas(minDia)} por semana = ${horas(minSemana)} por semana, ou ${horas(minMes)} por mês (${num(semanas, 2)} semanas). Valor da hora da equipe: ${R$(horaEquipe)} (${fase.horasSemana}h, divisor ${fase.divisor}).</p>
+      <div class="comparar comparar--4">
+        <div class="opcao${melhor.id === 'hora' && outro ? ' opcao--melhor' : ''}">
+          <h3>Contratar reforço por hora <span>(intermitente ou folguista)</span></h3>
+          <p class="opcao__valor">${R$(custoHora)}<span> por mês</span></p>
+          <p class="opcao__conta">${horas(minMes)} × ${R$(horaRef)}${encTxt}</p>
+          ${selo('hora')}
         </div>
-        <div class="opcao${!extraGanha ? ' opcao--melhor' : ''}">
-          <h3>Meio período</h3>
-          <p class="opcao__valor">${R$(custoMeio)}<span> por mês</span></p>
-          <p class="opcao__conta">${R$(meio)}${enc ? ` + ${numCurto(enc)}% de encargos` : ', sem encargos informados'}</p>
-          ${!extraGanha ? '<p class="opcao__selo">Mais barato</p>' : ''}
+        <div class="opcao${melhor.id === 'meio' ? ' opcao--melhor' : ''}">
+          <h3>Salário fixo de meio período</h3>
+          ${custoMeio != null ? `<p class="opcao__valor">${R$(custoMeio)}<span> por mês</span></p>
+          <p class="opcao__conta">${R$(meio)}${encTxt}</p>
+          ${passaMeio ? `<p class="opcao__nota">São ${horas(minSemana)} por semana. Meio período vai até ${R.equipe.meioPeriodoMaxHorasSemana}h por semana: uma pessoa só não cobre tudo.</p>` : ''}` : '<p class="opcao__conta">Escreva o salário do meio período para comparar.</p>'}
+          ${selo('meio')}
+        </div>
+        <div class="opcao">
+          <h3>Hora extra 50% <span>(estender a jornada)</span></h3>
+          <p class="opcao__valor">${R$(custoExtra)}<span> por mês</span></p>
+          <p class="opcao__conta">${horas(minMes)} × ${R$(horaEquipe)} × 1,5</p>
+          <p class="opcao__nota">Cada pessoa estende no máximo ${horas(limMin)} por dia. Para cobrir ${horas(minDia)} de um dia, são <strong>${pessoasExtra} ${pessoasExtra === 1 ? 'pessoa' : 'pessoas'} × ${horas(limMin)}</strong> a mais no mesmo dia.</p>
+        </div>
+        <div class="opcao opcao--excecao">
+          <h3>Chamar alguém na folga <span>(100%, dia de repouso)</span></h3>
+          <p class="opcao__valor">${R$(custoFolga)}<span> por mês</span></p>
+          <p class="opcao__conta">${horas(minMes)} × ${R$(horaEquipe)} × 2</p>
+          <p class="opcao__nota opcao__nota--forte">${icone('alerta')}<span>${AVISO_FOLGA}</span></p>
         </div>
       </div>
-      <p class="resultado__frase">${dif < 0.005 ? 'As duas opções custam o mesmo.' : `${extraGanha ? 'Pagar hora extra' : 'Contratar meio período'} sai <strong>${R$(dif)}</strong> mais barato por mês.`} Valor da hora pelas regras de ${fase.horasSemana}h (divisor ${fase.divisor}).</p>
-      <ul class="avisos">${avisos.join('')}</ul>`;
+      <p class="resultado__frase">${frase}</p>
+      <ul class="avisos">${aviso('Hora extra e trabalho na folga também aumentam férias, 13º e o repouso da semana. Esse acréscimo não entra nesta conta: confira com seu contador.', 'info')}</ul>`;
   }
-  function calcularReforco() { $('#f-resultado').innerHTML = htmlReforco(); }
+  function calcularReforco() {
+    const sal = valor(estado.salario);
+    const fase = faseAtual();
+    const hEq = sal > 0 ? sal / fase.divisor : 0;
+    $('#f-hora-ref').placeholder = hEq ? num(hEq) : '';
+    $('#f-hora-ref-dica').textContent = hEq ? `Em branco, usa o valor da hora da equipe: ${R$(hEq)}.` : 'Em branco, usa o valor da hora da equipe.';
+    $('#f-resultado').innerHTML = htmlReforco();
+  }
 
   /* =========================================================
      6. DESCONTO POR FALTA
@@ -1332,8 +1470,8 @@
       const naoPagas = horasPerdidas * vh;
       out.innerHTML = `
         <dl class="numeros">
-          <div><dt>Repouso da semana sem falta</dt><dd>${R$(repouso)}</dd><dd class="numeros__conta">${numCurto(hs)}h ÷ 6 × ${R$(vh)}</dd></div>
-          <div><dt>Horas não trabalhadas</dt><dd>${R$(naoPagas)}</dd><dd class="numeros__conta">${numCurto(horasPerdidas)}h que não são pagas</dd></div>
+          <div><dt>Repouso da semana sem falta</dt><dd>${R$(repouso)}</dd><dd class="numeros__conta">${horas(hs * 60)} ÷ 6 × ${R$(vh)}</dd></div>
+          <div><dt>Horas não trabalhadas</dt><dd>${R$(naoPagas)}</dd><dd class="numeros__conta">${horas(horasPerdidas * 60)} que não são pagas</dd></div>
           <div class="numeros__total"><dt>Deixa de receber</dt><dd>${R$(naoPagas + repouso)}</dd><dd class="numeros__conta">horas faltadas + repouso</dd></div>
         </dl>
         <p class="resultado__frase">O horista recebe só as horas que trabalha. Com falta sem justificativa, perde também o repouso da semana (1/6 das horas, cerca de 16,7% a mais). Mesmo assim, <strong>continua folgando os dias de folga</strong> da escala.</p>

@@ -439,6 +439,17 @@ a.btn--pri { color: var(--creme); }
 .cobertura__dias li.falta { background: var(--amarelo); border-style: dashed; }
 @media (min-width: 1100px) { .copiar { font-size: 13px; line-height: 1.25; } }
 
+/* reforço: quatro opções */
+@media (min-width: 640px) { .comparar--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.comparar--4 { row-gap: var(--s-5); }
+.opcao h3 span { display: block; font-family: var(--fonte); font-size: 15px; font-weight: 700; color: var(--marinho-2); }
+.opcao__nota { font-size: 15px; font-weight: 600; line-height: 1.45; margin-top: 4px; }
+.opcao__nota--forte { display: flex; gap: var(--s-2); align-items: flex-start; font-weight: 800; background: var(--amarelo-claro); border: 2px solid var(--amarelo-escuro); border-radius: var(--r-sm); padding: var(--s-2) var(--s-3); }
+.opcao--excecao { border-style: dashed; background: var(--creme); }
+
+.transicao { font-weight: 800; font-size: 17px; background: var(--amarelo); border: 2px solid var(--marinho); border-radius: var(--r-sm); padding: var(--s-3) var(--s-4); margin-bottom: var(--s-3); }
+.pergunta { display: grid; gap: var(--s-2); background: var(--amarelo-claro); border: 2px solid var(--amarelo-escuro); border-radius: var(--r-sm); padding: var(--s-3) var(--s-4); font-weight: 600; }
+
 /* rodízio: feriado */
 .cal__fer { font-size: 12px; margin-left: 1px; vertical-align: top; }
 .cal__dia--feriado { outline: 2px dotted var(--marinho); outline-offset: -4px; }
@@ -530,6 +541,8 @@ a.btn--pri { color: var(--creme); }
   .dias-equipe { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .numeros { grid-template-columns: repeat(3, 1fr); }
   .comparar { grid-template-columns: 1fr 1fr; }
+  .transicao { border: 2px solid #000 !important; }
+  .opcao--excecao { border-style: dashed !important; }
   .opcao__selo { position: static; border: 1px solid #000; transform: none; justify-self: start; }
 
   .rodape { background: none; padding: 10px 0 0; border-top: 1px solid #000; margin-top: 14px; font-size: 9pt; }

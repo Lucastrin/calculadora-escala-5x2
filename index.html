@@ -138,6 +138,10 @@
             <input id="a-pausa-fim" type="time" data-a="pausaFim">
           </div>
         </div>
+        <div class="pergunta" id="a-acordo" hidden>
+          <p id="a-acordo-txt"></p>
+          <label class="chk chk--linha"><input type="checkbox" data-a="acordoIntervalo"> Tenho acordo escrito ou convenção que permite intervalo maior que 2h</label>
+        </div>
         <fieldset class="campo campo--radio campo--largo">
           <legend>Atividade</legend>
           <label class="chk"><input type="radio" name="a-ativ" value="comercio" data-a="atividade"> Comércio</label>
@@ -320,7 +324,7 @@
       <h2>Custo do reforço</h2>
       <button type="button" class="btn btn--sec" data-imprimir="reforco"><svg class="ic"><use href="#i-imprimir"/></svg>Imprimir / salvar PDF</button>
     </div>
-    <p class="painel__intro">Para o mesmo buraco na escala, compare pagar hora extra para quem já trabalha com contratar alguém de meio período.</p>
+    <p class="painel__intro">Para o mesmo buraco na escala, compare contratar reforço, estender a jornada de quem já trabalha e, só em caso excepcional, chamar alguém na folga.</p>
 
     <div class="campos campos--2">
       <div class="campo">
@@ -331,19 +335,25 @@
       </div>
       <div class="campo">
         <label for="f-horas">Horas de trabalho em cada pessoa-dia</label>
-        <input id="f-horas" data-k="refHoras" inputmode="decimal" autocomplete="off">
+        <input id="f-horas" data-k="refHoras" autocomplete="off" placeholder="8h24" aria-describedby="f-horas-dica">
+        <p class="dica" id="f-horas-dica">Escreva como 8h24 ou 8h.</p>
       </div>
       <div class="campo">
-        <label for="f-salario">Salário de quem faria a hora extra (R$)</label>
+        <label for="f-salario">Salário da equipe (R$)</label>
         <input id="f-salario" data-k="salario" inputmode="decimal" autocomplete="off">
       </div>
       <div class="campo">
-        <label for="f-meio">Salário do meio período (R$)</label>
-        <input id="f-meio" data-k="refMeio" inputmode="decimal" autocomplete="off">
+        <label for="f-hora-ref">Valor da hora do reforço (R$)</label>
+        <input id="f-hora-ref" data-k="refHoraValor" inputmode="decimal" autocomplete="off" aria-describedby="f-hora-ref-dica">
+        <p class="dica" id="f-hora-ref-dica"></p>
       </div>
       <div class="campo">
-        <label for="f-enc">Encargos sobre o meio período (%), opcional</label>
+        <label for="f-enc">Encargos sobre o reforço (%), opcional</label>
         <input id="f-enc" data-k="refEnc" inputmode="decimal" autocomplete="off" placeholder="0">
+      </div>
+      <div class="campo">
+        <label for="f-meio">Salário fixo de meio período (R$), opcional</label>
+        <input id="f-meio" data-k="refMeio" inputmode="decimal" autocomplete="off">
       </div>
     </div>
 
