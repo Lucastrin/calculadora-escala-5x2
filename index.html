@@ -85,30 +85,36 @@
   <!-- ASSISTENTE -->
   <section class="assist" id="inicio" aria-label="Assistente da escala">
     <ol class="progresso" id="progresso" aria-label="Passos do assistente">
-      <li data-p="1"><span class="progresso__n">1</span><span class="progresso__t">O que muda</span></li>
-      <li data-p="2"><span class="progresso__n">2</span><span class="progresso__t">Seu negócio</span></li>
-      <li data-p="3"><span class="progresso__n">3</span><span class="progresso__t">Sua equipe</span></li>
-      <li data-p="4"><span class="progresso__n">4</span><span class="progresso__t">Sua escala pronta</span></li>
+      <li data-p="1"><span class="progresso__n">1</span><span class="progresso__t">Quando</span></li>
+      <li data-p="2"><span class="progresso__n">2</span><span class="progresso__t">Horário</span></li>
+      <li data-p="3"><span class="progresso__n">3</span><span class="progresso__t">Pessoas</span></li>
+      <li data-p="4"><span class="progresso__n">4</span><span class="progresso__t">Equipe</span></li>
+      <li data-p="5"><span class="progresso__n">5</span><span class="progresso__t">Escala</span></li>
     </ol>
 
     <!-- Passo 1 -->
     <div class="passo" data-passo="1">
-      <h2>O que muda</h2>
-      <ul class="cartoes">
-        <li class="cartao"><span class="cartao__data">16/12/2026</span><p>A semana passa a ter <strong>até 42 horas</strong>, com <strong>2 folgas por semana</strong>.</p></li>
-        <li class="cartao"><span class="cartao__data">16/12/2027</span><p>A semana passa a ter <strong>até 40 horas</strong>.</p></li>
-        <li class="cartao"><span class="cartao__data">Sempre</span><p>O <strong>salário não pode diminuir</strong> porque a jornada ficou menor.</p></li>
+      <h2>Para quando é a sua escala?</h2>
+      <fieldset class="regras-opcoes">
+        <legend class="sr">Regra da escala</legend>
+        <label class="opcao-regra"><input type="radio" name="a-regra" value="2026-12-16" data-regra><span><strong>A partir de 16/12/2026</strong>até 42h por semana</span></label>
+        <label class="opcao-regra"><input type="radio" name="a-regra" value="2027-12-16" data-regra><span><strong>A partir de 16/12/2027</strong>até 40h por semana</span></label>
+      </fieldset>
+      <ul class="cartoes cartoes--curtos" aria-label="O que muda">
+        <li class="cartao"><span class="cartao__data">16/12/2026</span><p>Até <strong>42h</strong> e <strong>2 folgas</strong> por semana.</p></li>
+        <li class="cartao"><span class="cartao__data">16/12/2027</span><p>Até <strong>40h</strong> por semana.</p></li>
+        <li class="cartao"><span class="cartao__data">Sempre</span><p>O <strong>salário não pode diminuir</strong>.</p></li>
       </ul>
       <div class="passo__acoes">
-        <button type="button" class="btn btn--pri" data-ir-passo="2">Montar minha escala</button>
+        <button type="button" class="btn btn--pri" data-ir-passo="2">Continuar</button>
         <a class="link" href="#hora">Ver todas as ferramentas</a>
       </div>
     </div>
 
     <!-- Passo 2 -->
     <div class="passo" data-passo="2">
-      <h2>Seu negócio</h2>
-      <p class="painel__intro">Toque no tipo de negócio. Os dias, o horário e as pessoas já vêm preenchidos, e você muda o que quiser.</p>
+      <h2>Quando seu negócio abre?</h2>
+      <p class="painel__intro">Toque no tipo de negócio. Os dias e o horário já vêm preenchidos, e você muda o que quiser.</p>
       <div class="negocios" role="group" aria-label="Tipo de negócio" id="a-negocios"></div>
 
       <div class="negocio-form" id="a-form">
@@ -122,11 +128,6 @@
             <input id="a-fecha" type="time" data-a="fecha">
             <button type="button" class="link" id="a-mesmo-horario">Mesmo horário todos os dias</button>
           </div>
-          <fieldset class="campo campo--radio">
-            <legend>Turnos</legend>
-            <label class="chk"><input type="radio" name="a-turnos" value="1" data-a="turnos"> Um turno</label>
-            <label class="chk"><input type="radio" name="a-turnos" value="2" data-a="turnos"> Manhã e tarde</label>
-          </fieldset>
         </div>
         <label class="chk chk--linha"><input type="checkbox" data-a="pausa"> Fecha no meio do dia</label>
         <div class="campos campos--3" id="a-pausa-campos">
@@ -148,7 +149,7 @@
           <label class="chk"><input type="radio" name="a-ativ" value="comercio" data-a="atividade"> Comércio</label>
           <label class="chk"><input type="radio" name="a-ativ" value="outras" data-a="atividade"> Outras</label>
         </fieldset>
-        <p class="campo__rotulo">Dias abertos, horário de cada dia e pessoas necessárias</p>
+        <p class="campo__rotulo">Dias abertos e horário de cada dia</p>
         <div class="dias-equipe dias-equipe--horario" id="a-dias"></div>
       </div>
 
@@ -160,11 +161,24 @@
 
     <!-- Passo 3 -->
     <div class="passo" data-passo="3">
-      <h2>Sua equipe</h2>
+      <h2>Quantas pessoas precisam estar trabalhando ao mesmo tempo?</h2>
+      <p class="turnos-frase" id="a-turnos-frase"></p>
+      <div class="necessidade" id="a-nec"></div>
+      <p class="dica">Conte quem precisa estar lá ao mesmo tempo. Ex.: 2 no caixa + 1 na reposição = 3.</p>
+      <div class="passo__acoes">
+        <button type="button" class="btn btn--sec" data-ir-passo="2">Voltar</button>
+        <button type="button" class="btn btn--pri" data-ir-passo="4">Continuar</button>
+      </div>
+    </div>
+
+    <!-- Passo 4 -->
+    <div class="passo" data-passo="4">
+      <h2>Quantos funcionários você precisa?</h2>
+      <div class="minimo" id="a-minimo" aria-live="polite"></div>
       <div class="campos campos--2">
         <div class="campo">
-          <label for="a-func">Quantos funcionários entram na escala</label>
-          <input id="a-func" data-a="func" inputmode="numeric" autocomplete="off">
+          <label for="a-func">Quantos funcionários você tem hoje?</label>
+          <input id="a-func" data-a="func" inputmode="numeric" autocomplete="off" aria-describedby="a-func-erro">
           <p class="campo__erro" id="a-func-erro"></p>
         </div>
         <div class="campo">
@@ -173,19 +187,24 @@
           <p class="campo__erro" id="a-salario-erro"></p>
         </div>
       </div>
+      <div class="resposta" id="a-resposta" aria-live="polite"></div>
       <details class="nomes">
         <summary>Escrever os nomes (opcional)</summary>
         <div class="nomes__lista" id="a-nomes"></div>
       </details>
-      <div class="resultado" id="a-equipe"></div>
-      <div class="passo__acoes">
-        <button type="button" class="btn btn--sec" data-ir-passo="2">Voltar</button>
-        <button type="button" class="btn btn--pri" id="a-gerar">Gerar minha escala</button>
+      <details class="nomes conta">
+        <summary>Ver a conta</summary>
+        <div class="resultado" id="a-equipe"></div>
+      </details>
+      <div class="passo__acoes" id="a-gerar-botoes">
+        <button type="button" class="btn btn--sec" data-ir-passo="3">Voltar</button>
+        <button type="button" class="btn btn--sec" id="a-gerar-tenho" data-gerar="tenho">Gerar escala com os que tenho</button>
+        <button type="button" class="btn btn--pri" id="a-gerar-rec" data-gerar="rec">Gerar escala com os recomendados</button>
       </div>
     </div>
 
-    <!-- Passo 4 -->
-    <div class="passo" data-passo="4">
+    <!-- Passo 5 -->
+    <div class="passo" data-passo="5">
       <div class="painel__topo">
         <h2>Sua escala pronta</h2>
       </div>
@@ -209,7 +228,7 @@
       </div>
       <p class="form__status so-tela" id="a-copiar-status" role="status"></p>
       <div class="passo__acoes so-tela">
-        <button type="button" class="link" data-ir-passo="3">Voltar</button>
+        <button type="button" class="link" data-ir-passo="4">Voltar</button>
       </div>
     </div>
   </section>

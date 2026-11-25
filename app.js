@@ -284,6 +284,7 @@
     if (!ROTAS.includes(id)) id = 'inicio';
     estado.aba = id;
     const noAssist = id === 'inicio';
+    document.body.classList.toggle('modo-assist', noAssist);
     $('#ver').hidden = true;
     $('#abas').hidden = noAssist;
     $('#inicio').hidden = !noAssist;
@@ -927,17 +928,21 @@
   // Monta as pessoas (turno + ciclo de folgas). Com 2 turnos, testa todas as divisões da equipe.
   function gerarNegocio(neg, n, fase, P) {
     const aberto = neg.dias.map((d) => d.aberto);
-    const need = neg.dias.map((d) => (d.aberto ? Math.max(0, Math.round(valor(d.pessoas) || 0)) : 0));
     const semana = turnosDaSemana(neg, fase);
     const turnos = semana.base;
     const porDia = semana.porDia;
+    // Necessidade por turno: a que o dono escreveu no passo 3 ou, sem ela, o total do dia dividido entre os turnos.
+    const necT = neg.necPorTurno && neg.necPorTurno.length === turnos.length ? neg.necPorTurno : null;
+    const need = necT
+      ? aberto.map((ab, d) => (ab ? necT.reduce((s, arr) => s + (arr[d] || 0), 0) : 0))
+      : neg.dias.map((d) => (d.aberto ? Math.max(0, Math.round(valor(d.pessoas) || 0)) : 0));
     const somaFalta = (f) => f.flat().reduce((s, x) => s + x, 0);
     if (turnos.length === 1) {
       const r = gerarCiclo(n, need, aberto, P);
       return { turnos, porDia, grupos: [{ turno: turnos[0], indice: 0, ciclos: r.ciclos, falta: r.falta, need }] };
     }
-    const needM = need.map((x) => necessidadeDoTurno(x, turnos[0]));
-    const needT = need.map((x) => necessidadeDoTurno(x, turnos[1]));
+    const needM = necT ? necT[0].map((x, d) => (aberto[d] ? x : 0)) : need.map((x) => necessidadeDoTurno(x, turnos[0]));
+    const needT = necT ? necT[1].map((x, d) => (aberto[d] ? x : 0)) : need.map((x) => necessidadeDoTurno(x, turnos[1]));
     const totalM = needM.reduce((s, x) => s + x, 0);
     const totalT = needT.reduce((s, x) => s + x, 0);
     let melhor = null;
@@ -1018,12 +1023,22 @@
     estado.rodReparado[chaveMes(ano, mes)] = true;
   }
 
+  // Gera e grava a escala com o número de pessoas escolhido no passo 4 e atualiza a tela.
   function gerarEscala() {
     const a = estado.assist;
+    montarEscala(inteiro(a.nGerar || a.func, 1, R.maxPessoasNaEscala));
+    salvar();
+    preencherCampos();
+    desenharEscala(); desenharEquipe(); calcularTudo();
+  }
+
+  // Monta a escala com n pessoas só no estado (sem desenhar nada). Usada também para achar o mínimo de funcionários.
+  function montarEscala(n) {
+    const a = estado.assist;
     const fase = faseAtual();
-    const n = inteiro(a.func, 1, R.maxPessoasNaEscala);
+    const neg = negocioDoAssist(a, fase);
     const P = a.dias[6].aberto ? (R.descanso.domingoACadaSemanas[a.atividade] || R.descanso.domingoACadaSemanas.outras) : 1;
-    const r = gerarNegocio(a, n, fase, P);
+    const r = gerarNegocio(neg, n, fase, P);
     const inicio = segundaDe(isoDe(a.ano, a.mes, 1));
     const pessoas = [];
     r.grupos.forEach((g) => g.ciclos.forEach((ciclo) => {
@@ -1048,7 +1063,9 @@
     estado.rodMes = a.mes;
     estado.rodAno = a.ano;
     estado.atividade = a.atividade;
-    estado.eqDias = a.dias.map((d) => ({ aberto: d.aberto, pessoas: String(d.aberto ? Math.max(0, Math.round(valor(d.pessoas) || 0)) : 0) }));
+    estado.necTurno = {};
+    r.grupos.forEach((g) => { estado.necTurno[g.turno.nome] = g.need.slice(); });
+    estado.eqDias = a.dias.map((d, i) => ({ aberto: d.aberto, pessoas: String(d.aberto ? r.grupos.reduce((s, g) => s + (g.need[i] || 0), 0) : 0) }));
     estado.func = String(n);
     estado.gerado = { turnos: r.turnos };
     repararMes(a.ano, a.mes);
@@ -1065,9 +1082,7 @@
       estado.refTurnos = String(falta.porSemana);
       estado.refHoras = horas(peso ? Math.round(soma / peso / 15) * 15 : r.turnos[0].liq);
     }
-    salvar();
-    preencherCampos();
-    desenharEscala(); desenharEquipe(); calcularTudo();
+    return r;
   }
 
   // Cobertura do mês: semana a semana, por turno quando há manhã e tarde.
@@ -1076,7 +1091,9 @@
     const nomes = [...new Set(estado.pessoas.map((p) => p.turno).filter(Boolean))];
     const grupos = nomes.length ? nomes : [null];
     const divisao = (g) => (estado.pessoas.find((p) => p.turno === g) || {}).divisao;
-    const precisa = (ds, g) => necessidadeDoTurno(necessidadeDia(ds), g ? { nome: g, divisao: divisao(g) } : null);
+    const nec = estado.necTurno || {};
+    const precisa = (ds, g) => (g && nec[g] ? nec[g][ds] || 0 : !g && nec.Integral && estado.pessoas.every((p) => !p.turno) ? nec.Integral[ds] || 0
+      : necessidadeDoTurno(necessidadeDia(ds), g ? { nome: g, divisao: divisao(g) } : null));
     const semanas = new Map();
     const dias = new Set();
     const mapa = new Map();
@@ -1123,17 +1140,49 @@
     const m = R.modelos[id];
     Object.assign(estado.assist, {
       negocio: id,
-      abre: m.abre, fecha: m.fecha, turnos: String(m.turnos),
+      abre: m.abre, fecha: m.fecha,
       pausa: !!m.pausa,
       pausaIni: m.pausa ? m.pausa[0] : '15:00',
       pausaFim: m.pausa ? m.pausa[1] : '18:00',
       acordoIntervalo: false,
       atividade: m.atividade,
+      // pessoas: total do dia no modelo, usado só para pré-preencher o passo 3; nec: o que o dono escreve por turno
       dias: m.dias.map((x, i) => {
         const h = (m.horarios && m.horarios[i]) || [m.abre, m.fecha];
-        return { aberto: !!x, pessoas: String(m.pessoas[i]), abre: h[0], fecha: h[1] };
+        return { aberto: !!x, pessoas: String(m.pessoas[i]), abre: h[0], fecha: h[1], nec: {} };
       })
     });
+  }
+
+  /* O sistema decide os turnos sozinho: pelo dia mais longo, se a jornada máxima da fase cobre o dia inteiro
+     é um turno; se não, dois (Manhã e Tarde). Pausa longa sem acordo vira Almoço e Jantar (estruturaDoNegocio). */
+  function negocioDoAssist(a, fase = faseAtual()) {
+    let maior = null;
+    a.dias.forEach((d, i) => {
+      if (!d.aberto) return;
+      const h = horarioDia(a, i);
+      const s = paraMin(h.abre);
+      let f = paraMin(h.fecha);
+      if (s == null || f == null) return;
+      if (f <= s) f += 1440;
+      if (!maior || f - s > maior.span) maior = { span: f - s, abre: h.abre, fecha: h.fecha };
+    });
+    const span = maior ? maior.span : 0;
+    const neg = { ...a, abre: maior ? maior.abre : a.abre, fecha: maior ? maior.fecha : a.fecha, spanMaior: span };
+    neg.turnos = span - intPara(span) > fase.limiteDiaMin ? '2' : '1';
+    const nomes = turnosDoNegocio(neg, fase).map((t) => t.nome);
+    neg.nomesTurnos = nomes;
+    neg.necPorTurno = nomes.map((nome) => a.dias.map((d, i) => (d.aberto ? necessidadeAssist(a, i, nome, nomes) : 0)));
+    return neg;
+  }
+  // Pessoas ao mesmo tempo num turno de um dia: o que o dono escreveu ou, sem isso, o total do modelo dividido entre os turnos.
+  function necessidadeAssist(a, i, nome, nomes) {
+    const d = a.dias[i];
+    const v = d.nec && d.nec[nome];
+    if (v != null && v !== '') return Math.max(0, Math.round(valor(v) || 0));
+    const total = Math.max(0, Math.round(valor(d.pessoas) || 0));
+    if (nomes.length < 2) return total;
+    return nome === nomes[0] ? Math.ceil(total / 2) : Math.floor(total / 2);
   }
 
   function aoMudarAssist(el, tipo) {
@@ -1149,7 +1198,7 @@
     if (k === 'pausa') $('#a-pausa-campos').hidden = !a.pausa;
     mostrarPerguntaAcordo();
     if (k === 'func') { desenharNomes(); validarFunc(false); }
-    desenharEquipeAssist();
+    if (a.passo === 4) desenharEquipeAssist();
   }
 
   function desenharNegocios() {
@@ -1162,7 +1211,8 @@
   }
   // Pausa que daria intervalo maior que 2h: pergunta pelo acordo; sem ele, a escala usa Almoço e Jantar.
   function mostrarPerguntaAcordo() {
-    const p = intervaloDaPausa(estado.assist, faseAtual());
+    const fase = faseAtual();
+    const p = intervaloDaPausa(negocioDoAssist(estado.assist, fase), fase);
     const longo = !!p && p.int > R.intervaloMaximoSemAcordoMin;
     $('#a-acordo').hidden = !longo;
     if (longo) {
@@ -1181,21 +1231,20 @@
           <label>Abre<input type="time" data-ad="abre" value="${esc(h.abre)}" ${off} aria-label="Abre às, ${DIAS_NOME[i]}"></label>
           <label>Fecha<input type="time" data-ad="fecha" value="${esc(h.fecha)}" ${off} aria-label="Fecha às, ${DIAS_NOME[i]}"></label>
         </div>
-        <label class="dia-eq__qtd">Pessoas<input data-ad="pessoas" inputmode="numeric" value="${esc(d.pessoas)}" ${off} aria-label="Pessoas necessárias em ${DIAS_NOME[i]}"></label>
       </div>`;
     }).join('');
   }
   $('#a-mesmo-horario').addEventListener('click', () => {
     const a = estado.assist;
     a.dias.forEach((d) => { d.abre = a.abre; d.fecha = a.fecha; });
-    salvar(); desenharDiasAssist(); desenharEquipeAssist();
+    salvar(); desenharDiasAssist(); mostrarPerguntaAcordo();
   });
   $('#a-negocios').addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-neg]');
     if (!b) return;
     aplicarModelo(b.dataset.neg);
     salvar();
-    desenharNegocios(); desenharDiasAssist(); preencherCampos(); desenharEquipeAssist();
+    desenharNegocios(); desenharDiasAssist(); preencherCampos();
     $(`[data-neg="${b.dataset.neg}"]`).focus();
   });
   $('#a-dias').addEventListener('input', (ev) => {
@@ -1209,12 +1258,14 @@
       $$('input:not([type="checkbox"])', box).forEach((x) => { x.disabled = !d.aberto; });
     } else if (el.dataset.ad === 'abre' || el.dataset.ad === 'fecha') {
       if (el.value) d[el.dataset.ad] = el.value;
-    } else d.pessoas = el.value;
-    salvar(); desenharEquipeAssist();
+    }
+    salvar(); mostrarPerguntaAcordo();
   });
 
   function desenharNomes() {
-    const n = inteiro(estado.assist.func, 1, R.maxPessoasNaEscala);
+    const a = estado.assist;
+    const rec = (minimoCache && minimoCache.res && minimoCache.res.minimo) || 0;
+    const n = Math.max(inteiro(a.func, 1, R.maxPessoasNaEscala), Math.min(rec, R.maxPessoasNaEscala));
     const caixa = $('#a-nomes');
     if (caixa.children.length === n) return;
     caixa.innerHTML = Array.from({ length: n }, (_, i) => `
@@ -1239,7 +1290,8 @@
 
   function contaAssist() {
     const a = estado.assist;
-    const necessarios = a.dias.reduce((s, d) => s + (d.aberto ? Math.max(0, Math.round(valor(d.pessoas) || 0)) : 0), 0);
+    const neg = negocioDoAssist(a);
+    const necessarios = neg.necPorTurno.flat().reduce((s, x) => s + x, 0);
     const func = Math.max(0, Math.round(valor(a.func) || 0));
     const disponiveis = func * R.equipe.diasPorFuncionario;
     return { necessarios, func, disponiveis, falta: necessarios - disponiveis };
@@ -1261,55 +1313,131 @@
       <ul class="avisos">${msg}</ul>`;
   }
 
-  /* Prevê, antes de gerar, o que o passo 4 vai mostrar: roda o mesmo gerador (sem salvar nada)
-     e confere quantas pessoas podem trabalhar no domingo respeitando o rodízio obrigatório. */
-  function previsaoAssist() {
+  /* ---------- passo 3: pessoas ao mesmo tempo, por turno ---------- */
+  const NOME_NEGOCIO = { loja: 'Sua loja fica aberta', mercado: 'Seu mercado fica aberto', padaria: 'Sua padaria fica aberta', restaurante: 'Seu restaurante fica aberto', outro: 'Seu negócio fica aberto' };
+  function desenharNecessidade() {
     const a = estado.assist;
-    const n = inteiro(a.func, 1, R.maxPessoasNaEscala);
     const fase = faseAtual();
-    const domAberto = a.dias[6].aberto;
-    const P = domAberto ? (R.descanso.domingoACadaSemanas[a.atividade] || R.descanso.domingoACadaSemanas.outras) : 1;
-    const r = gerarNegocio(a, n, fase, P);
-    const porSemana = Array.from({ length: P }, (_, w) => r.grupos.reduce((s, g) => s + g.falta[w].reduce((x, y) => x + y, 0), 0));
-    const dias = [...new Set(r.grupos.flatMap((g) => g.falta.flatMap((sem) => sem.map((f, d) => (f > 0 ? d : -1)))))].filter((d) => d >= 0).sort((x, y) => x - y);
-    const nomes = r.turnos.length > 1 ? r.turnos.map((t) => t.nome) : [null];
-    const mapa = new Map();
-    r.grupos.forEach((g) => {
-      const nome = r.turnos.length > 1 ? g.turno.nome : null;
-      for (let w = 0; w < P; w++) for (let d = 0; d < 7; d++) if (a.dias[d].aberto) anotarFalta(mapa, d, nome, g.need[d], g.need[d] - g.falta[w][d]);
-    });
-    const itens = itensFalta(mapa, nomes);
-    // domingo: no rodízio, numa semana ruim só trabalham m − ⌈m/P⌉ das m pessoas de um turno
-    let domingoCurto = false;
-    const precisaDom = domAberto ? Math.max(0, Math.round(valor(a.dias[6].pessoas) || 0)) : 0;
-    if (precisaDom > 0) {
-      const cabe = (m) => m - Math.ceil(m / P);
-      if (r.turnos.length === 1) domingoCurto = cabe(n) < precisaDom;
-      else {
-        const nA = necessidadeDoTurno(precisaDom, r.turnos[0]);
-        const nB = necessidadeDoTurno(precisaDom, r.turnos[1]);
-        domingoCurto = true;
-        for (let k = 1; k < n; k++) if (cabe(k) >= nA && cabe(n - k) >= nB) { domingoCurto = false; break; }
-      }
-      if (r.grupos.some((g) => g.falta.some((sem) => sem[6] > 0))) domingoCurto = true;
+    const neg = negocioDoAssist(a, fase);
+    const turnos = turnosDoNegocio(neg, fase);
+    const quem = NOME_NEGOCIO[a.negocio] || NOME_NEGOCIO.outro;
+    const lista2 = turnos.map((t) => `${t.nome} (${horarioDoTurno(t)})`);
+    const base = `${quem} até ${horas(neg.spanMaior)} por dia. Cada pessoa trabalha no máximo ${horas(fase.limiteDiaMin)} por dia nesta regra.`;
+    $('#a-turnos-frase').textContent = turnos.length > 1
+      ? `${base} Por isso a escala tem 2 turnos: ${lista2[0]} e ${lista2[1]}.`
+      : `${base} Cada pessoa cobre o dia inteiro (${horarioDoTurno(turnos[0])}).`;
+    const cols = turnos.length > 1 ? turnos.map((t) => t.nome) : ['Pessoas'];
+    $('#a-nec').innerHTML = `
+      <div class="nec-cab" aria-hidden="true"><span>Dia</span>${cols.map((c) => `<span>${c}</span>`).join('')}</div>
+      ${a.dias.map((d, i) => {
+        if (!d.aberto) return '';
+        const h = horarioDia(a, i);
+        return `<div class="nec-linha" data-i="${i}">
+          <span class="nec-dia"><strong>${DIAS[i]}</strong> ${h.abre}–${h.fecha}</span>
+          ${neg.nomesTurnos.map((nome, j) => `<label><span class="nec-rot">${cols[j]}</span><input data-nec="${esc(nome)}" inputmode="numeric" value="${necessidadeAssist(a, i, nome, neg.nomesTurnos)}" aria-label="${DIAS_NOME[i]}, ${turnos.length > 1 ? cols[j].toLowerCase() : 'pessoas ao mesmo tempo'}"></label>`).join('')}
+        </div>`;
+      }).join('')}`;
+    $('#a-nec').style.setProperty('--cols', String(cols.length));
+  }
+  $('#a-nec').addEventListener('input', (ev) => {
+    const el = ev.target;
+    const linha = el.closest('.nec-linha');
+    if (!linha || !el.dataset.nec) return;
+    const d = estado.assist.dias[Number(linha.dataset.i)];
+    d.nec = d.nec || {};
+    d.nec[el.dataset.nec] = el.value;
+    salvar();
+  });
+
+  /* ---------- passo 4: mínimo de funcionários ---------- */
+  // Roda o gerador de verdade para n = 1..10 e fica com o menor n sem falta no mês escolhido. Não grava nada.
+  let minimoCache = null;
+  let atualCache = null;
+  const chaveNegocio = (a) => JSON.stringify([a.dias, a.abre, a.fecha, a.pausa, a.pausaIni, a.pausaFim, a.acordoIntervalo, a.atividade, a.mes, a.ano, dataRef()]);
+  // Gera com n pessoas sem gravar nada e devolve a falta do mês (e as horas de cada pessoa-dia que falta).
+  function simular(n) {
+    const foto = JSON.stringify(estado);
+    try {
+      montarEscala(n);
+      const falta = faltaDoMes(estado.assist.ano, estado.assist.mes);
+      const nomes = [...new Set(estado.pessoas.map((p) => p.turno).filter(Boolean))];
+      return { falta, refTurnos: estado.refTurnos, refHoras: estado.refHoras, porTurno: nomes.map((nome) => ({ nome, n: estado.pessoas.filter((p) => p.turno === nome).length })) };
+    } finally {
+      estado = JSON.parse(foto);
     }
-    return { porSemana: Math.max(0, ...porSemana), dias, itens, domingoCurto, turnos: r.turnos };
+  }
+  function calcularMinimo() {
+    const a = estado.assist;
+    const chave = chaveNegocio(a);
+    if (!minimoCache || minimoCache.chave !== chave) {
+      const res = { minimo: null, porTurno: [] };
+      for (let n = 1; n <= R.maxPessoasNaEscala; n++) {
+        const s = simular(n);
+        if (s.falta.porSemana === 0) { res.minimo = n; res.porTurno = s.porTurno; break; }
+      }
+      minimoCache = { chave, res };
+    }
+    const res = { ...minimoCache.res, atual: null };
+    const tem = Math.round(valor(estado.assist.func));
+    if (tem >= 1 && tem <= R.maxPessoasNaEscala && (res.minimo == null || tem < res.minimo)) {
+      const ch = chave + '|' + tem;
+      if (!atualCache || atualCache.chave !== ch) atualCache = { chave: ch, s: simular(tem) };
+      const s = atualCache.s;
+      res.atual = { falta: s.falta, rc: s.falta.porSemana > 0 ? calcReforco({ pd: s.refTurnos, horas: s.refHoras }) : null };
+    }
+    return res;
   }
 
+  const TURNO_DE = { 'Manhã': 'de manhã', 'Tarde': 'à tarde', 'Almoço': 'no almoço', 'Jantar': 'no jantar' };
   function desenharEquipeAssist() {
     if (estado.aba !== 'inicio') return;
-    const c = contaAssist();
-    const abertos = estado.assist.dias.filter((d) => d.aberto).length;
-    const pv = previsaoAssist();
-    // A frase principal segue a escala gerada (a mesma do passo 4), não só a conta no papel.
-    let principal = null;
-    if (pv.porSemana > 0) {
-      principal = aviso(`${c.falta <= 0 ? 'No papel a equipe dá conta, mas na escala real falta gente:' : 'Na escala real falta gente:'}${htmlFaltas(pv.itens)}`);
+    const a = estado.assist;
+    const fase = faseAtual();
+    const res = calcularMinimo();
+    const domingo = a.dias[6].aberto ? ' e o domingo em rodízio' : '';
+    const folgas = `${fase.repousosSemana} ${fase.repousosSemana > 1 ? 'folgas' : 'folga'} por semana`;
+    const plur = (n) => `${n} ${n === 1 ? 'funcionário' : 'funcionários'}`;
+    if (res.minimo == null) {
+      $('#a-minimo').innerHTML = `<p class="minimo__frase">Com até ${R.maxPessoasNaEscala} pessoas não fecha; reduza o horário ou as pessoas por turno.</p>`;
+    } else {
+      const divisao = res.porTurno.length > 1 ? `: ${lista(res.porTurno.map((t) => `${t.n} ${TURNO_DE[t.nome] || t.nome.toLowerCase()}`))}` : '';
+      $('#a-minimo').innerHTML = `<p class="minimo__frase">Para cobrir seu horário com ${folgas}${domingo}, você precisa de <strong>${plur(res.minimo)}</strong>${divisao}.</p>`;
     }
-    const extras = [];
-    if (pv.domingoCurto) extras.push(aviso('No domingo pode faltar gente em algumas semanas por causa do rodízio obrigatório de domingos.'));
-    if (pv.porSemana > 0 && pv.turnos.length > 1) extras.push(aviso(`Cada pessoa fica fixa no seu turno (${pv.turnos.map((t) => t.nome.toLowerCase()).join(' ou ')}), então a necessidade de cada dia é dividida entre os turnos.`, 'info'));
-    $('#a-equipe').innerHTML = `<h3>Sua equipe dá conta?</h3>${htmlConta(c, abertos, principal)}${extras.length ? `<ul class="avisos">${extras.join('')}</ul>` : ''}${pv.porSemana > 0 ? '<p class="resultado__frase">Dá para gerar a escala mesmo assim: ela mostra em que dias falta gente e quanto custa cobrir.</p>' : ''}`;
+
+    // resposta para quem já tem uma equipe
+    const tem = Math.round(valor(a.func));
+    const valido = tem >= 1 && tem <= R.maxPessoasNaEscala;
+    let resp = '';
+    if (valido && res.minimo != null) {
+      if (tem < res.minimo) {
+        const falta = res.minimo - tem;
+        const rc = res.atual && res.atual.rc;
+        resp = `<p class="resposta__frase">Você tem ${tem}. ${falta === 1 ? 'Falta 1' : `Faltam ${falta}`} para cobrir tudo.</p>${rc ? (rc.erro ? `<p class="vazio">${rc.erro}</p>` : `<p class="recomendacao">${rc.recomendacao}</p>`) : ''}`;
+      } else if (tem === res.minimo) {
+        resp = '<p class="resposta__frase resposta__frase--ok">Sua equipe fecha certinho.</p>';
+      } else {
+        const sobra = tem - res.minimo;
+        resp = `<p class="resposta__frase resposta__frase--ok">Você tem ${tem}, ${sobra} a mais do que precisa. Sobra gente para cobrir férias e faltas.</p>`;
+      }
+    } else if (valido && res.minimo == null && res.atual) {
+      resp = `<p class="resposta__frase">Você tem ${tem}. Mesmo assim falta gente:</p>${htmlFaltas(res.atual.falta.itens)}`;
+    }
+    $('#a-resposta').innerHTML = resp;
+
+    // botões de gerar
+    const bTem = $('#a-gerar-tenho');
+    const bRec = $('#a-gerar-rec');
+    bTem.hidden = !valido || tem === res.minimo;
+    bTem.textContent = `Gerar escala com os ${tem} que tenho`;
+    bTem.dataset.n = String(tem);
+    bRec.hidden = res.minimo == null;
+    bRec.textContent = valido && tem === res.minimo ? `Gerar escala com os ${res.minimo}` : `Gerar escala com os ${res.minimo} recomendados`;
+    bRec.dataset.n = String(res.minimo || '');
+
+    // a conta de pessoas-dia, recolhida
+    const c = contaAssist();
+    const abertos = a.dias.filter((d) => d.aberto).length;
+    $('#a-equipe').innerHTML = htmlConta(c, abertos);
   }
 
   function mostrarPasso(n, focar) {
@@ -1321,9 +1449,11 @@
       li.classList.toggle('feito', p < n);
       if (p === n) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
     });
+    if (n === 1) desenharRegra();
     if (n === 2) { desenharNegocios(); desenharDiasAssist(); }
-    if (n === 3) { desenharNomes(); desenharEquipeAssist(); }
-    if (n === 4) desenharPronta();
+    if (n === 3) desenharNecessidade();
+    if (n === 4) { desenharEquipeAssist(); desenharNomes(); }
+    if (n === 5) desenharPronta();
     preencherCampos();
     salvar();
     if (focar) {
@@ -1339,13 +1469,38 @@
     const b = ev.target.closest('[data-ir-passo]');
     if (!b) return;
     const n = Number(b.dataset.irPasso);
-    if (n === 3 && !estado.assist.negocio) return;
+    if (n >= 3 && !estado.assist.negocio) return;
     mostrarPasso(n, true);
   });
-  $('#a-gerar').addEventListener('click', () => {
-    if (!validarFunc(true)) { $('#a-func').focus(); return; }
+
+  // Passo 1: a regra escolhida (42h ou 40h) define a data das regras e o mês do rodízio.
+  function desenharRegra() {
+    const h = faseAtual().horasSemana;
+    $$('[data-regra]').forEach((r) => { r.checked = (r.value === '2026-12-16' && h === 42) || (r.value === '2027-12-16' && h === 40); });
+  }
+  $$('[data-regra]').forEach((r) => r.addEventListener('change', () => {
+    if (!r.checked) return;
+    const a = estado.assist;
+    if (r.value === '2027-12-16') { a.ano = 2028; a.mes = 1; }
+    else {
+      const [ah, mh] = hojeISO().split('-').map(Number);
+      let [ano, mes] = mesVizinho(ah, mh, 1);
+      if (ano < 2026 || (ano === 2026 && mes < 12) || ano > 2027 || (ano === 2027 && mes === 12)) { ano = 2026; mes = 12; }
+      a.ano = ano; a.mes = mes;
+    }
+    preencherSelectsMes();
+    mudarData(r.value);
+  }));
+
+  // Passo 4: gerar com os que tem ou com os recomendados.
+  $('#a-gerar-botoes').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-gerar]');
+    if (!b) return;
+    const n = Number(b.dataset.n);
+    if (!(n >= 1 && n <= R.maxPessoasNaEscala)) { validarFunc(true); $('#a-func').focus(); return; }
+    estado.assist.nGerar = n;
     gerarEscala();
-    mostrarPasso(4, true);
+    mostrarPasso(5, true);
   });
   $('#a-recomecar').addEventListener('click', () => {
     if (!confirm('Recomeçar o assistente? A escala gerada continua salva até você gerar outra.')) return;
@@ -1539,6 +1694,7 @@
     const box = el.closest('.dia-eq');
     if (!box) return;
     const d = estado.eqDias[Number(box.dataset.i)];
+    estado.necTurno = null; // mudou à mão: a necessidade por turno volta a ser o total do dia dividido
     if (el.dataset.eq === 'aberto') {
       d.aberto = el.checked;
       box.classList.toggle('dia-eq--fechado', !d.aberto);
@@ -1575,10 +1731,10 @@
 
   /* Quatro formas de cobrir as pessoas-dia que faltam. A recomendação só escolhe entre as formas de contratar:
      chamar na folga é exceção e hora extra só estende jornada (até 2h por pessoa por dia). */
-  function calcReforco() {
+  function calcReforco(o = {}) {
     const fase = faseAtual();
-    const pd = Math.max(0, valor(estado.refTurnos) || 0);
-    const hDia = Math.max(0, lerHoras(estado.refHoras) || 0);
+    const pd = Math.max(0, valor(o.pd != null ? o.pd : estado.refTurnos) || 0);
+    const hDia = Math.max(0, lerHoras(o.horas != null ? o.horas : estado.refHoras) || 0);
     const cs = conferirSalario(estado.salario);
     const sal = cs.v;
     const meio = valor(estado.refMeio);
@@ -1726,8 +1882,7 @@
     calcularReforco();
     calcularFalta();
     if (estado.aba === 'inicio') {
-      if (estado.assist.passo === 3) desenharEquipeAssist();
-      if (estado.assist.passo === 4 && document.activeElement && document.activeElement.id === 'a-salario') desenharPronta();
+      if (estado.assist.passo === 4) desenharEquipeAssist();
     }
   }
 
