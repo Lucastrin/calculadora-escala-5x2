@@ -79,4 +79,34 @@
     });
   });
   abrir(/iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'iphone' : 'android');
+
+  // Botão "Adicionar à tela inicial" (Chrome no Android). Só aparece quando o navegador permite;
+  // no iPhone isso não existe, então ficam só os passos.
+  const tela = $('.tela-inicial');
+  const btnInstalar = $('#instalar');
+  const pronto = () => {
+    btnInstalar.hidden = true;
+    $('#so-ou').hidden = true;
+    $('#instalado').hidden = false;
+  };
+  if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
+    tela.hidden = true; // já foi aberta pelo ícone da tela
+  }
+  let pedido = null;
+  window.addEventListener('beforeinstallprompt', (ev) => {
+    ev.preventDefault();
+    pedido = ev;
+    btnInstalar.hidden = false;
+    $('#so-ou').hidden = false;
+    abrir('android');
+  });
+  btnInstalar.addEventListener('click', async () => {
+    if (!pedido) return;
+    pedido.prompt();
+    const { outcome } = await pedido.userChoice;
+    pedido = null;
+    if (outcome === 'accepted') pronto();
+    else { btnInstalar.hidden = true; $('#so-ou').hidden = true; } // só dá para pedir uma vez; os passos continuam abaixo
+  });
+  window.addEventListener('appinstalled', pronto);
 })();
