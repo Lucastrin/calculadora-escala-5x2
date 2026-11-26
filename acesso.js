@@ -19,7 +19,7 @@ window.ACESSO = {
   calculadora: 'https://mapafaciltriux.vercel.app/#inicio',
 
   arquivos: {
-    guia: '../arquivos/mapa-facil-escala-5x2.pdf',
+    guia: 'https://drive.google.com/file/d/1Y9eBEFPfkdWkPNgHQW0lpDiq6FA5xPl2/view?usp=sharing',
     modelos: 'https://drive.google.com/file/d/1gzGJ7xClkACEZ8z_C0ZcWUTek28_MxIe/view?usp=sharing',
     kit: 'https://drive.google.com/file/d/1CqkleGVpM6Km6jm-9Ph0n5pqbCbgwsGV/view?usp=sharing'
   },

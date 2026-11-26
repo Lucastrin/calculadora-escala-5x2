@@ -7,7 +7,8 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const icone = (id) => `<svg class="ic" aria-hidden="true"><use href="#i-${id}"/></svg>`;
   const nomeArquivo = (url) => url.split('/').pop();
-  // Link do Google Drive: "Abrir" mostra no Drive, "Baixar" usa o link de download direto.
+  // Link do Google Drive: "Abrir" mostra no Drive, "Baixar" usa o download direto
+  // (confirm=t pula o aviso "grande demais para verificar vírus" dos arquivos acima de 100 MB).
   const idDrive = (url) => (/drive\.google\.com\/(?:file\/d\/|open\?id=)([\w-]+)/.exec(url) || [])[1];
   const botoesAbrir = (abrir, baixar, nome) => `<a class="btn btn--pri" href="${esc(abrir)}" target="_blank" rel="noopener">Abrir</a>
          <a class="btn btn--sec" href="${esc(baixar)}"${nome ? ` download="${esc(nome)}"` : ''}>Baixar</a>`;
@@ -22,7 +23,7 @@
     const url = it.arquivo && A.arquivos[it.arquivo];
     const drive = url && idDrive(url);
     if (drive) {
-      botoes = `<div class="item__botoes">${botoesAbrir(`https://drive.google.com/file/d/${drive}/view`, `https://drive.google.com/uc?export=download&id=${drive}`)}</div>`;
+      botoes = `<div class="item__botoes">${botoesAbrir(`https://drive.google.com/file/d/${drive}/view`, `https://drive.usercontent.google.com/download?id=${drive}&export=download&confirm=t`)}</div>`;
     } else if (url) {
       botoes = `<div class="item__botoes" data-pdf="${esc(url)}" data-nome="${esc(nomeArquivo(url))}">
         <span class="btn btn--pri btn--espera" aria-disabled="true">Verificando…</span></div>`;
