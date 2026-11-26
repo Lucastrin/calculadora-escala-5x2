@@ -41,32 +41,39 @@
 </header>
 
 <main class="wrap acesso" id="conteudo">
-  <ul class="itens" id="itens" aria-label="Seus materiais"></ul>
-
-  <section class="tela-inicial" aria-labelledby="tela-titulo">
-    <h2 id="tela-titulo">Deixe na tela do celular</h2>
-    <p>Assim você abre seus materiais com um toque, como um aplicativo.</p>
-    <button type="button" class="btn btn--pri btn--largo" id="instalar" hidden>Adicionar à tela inicial</button>
+  <div class="materiais">
+    <ul class="itens" id="itens" aria-label="Seus materiais"></ul>
+    <p class="salvar" id="salvar" hidden>
+      <button type="button" class="salvar__btn" id="salvar-btn" aria-haspopup="dialog">
+        <svg class="ic" aria-hidden="true"><use href="#i-celular"/></svg>Salvar na tela do celular
+      </button>
+    </p>
     <p class="instalado" id="instalado" role="status" hidden>Pronto! O ícone do Mapa Fácil já está na tela do seu celular.</p>
-    <p class="so-ou" id="so-ou" hidden>Se o botão não funcionar, faça assim:</p>
-    <div class="so-abas" role="tablist" aria-label="Seu celular">
-      <button type="button" role="tab" id="aba-android" aria-controls="passos-android" data-so="android">Android</button>
-      <button type="button" role="tab" id="aba-iphone" aria-controls="passos-iphone" data-so="iphone">iPhone</button>
-    </div>
-    <ol class="so-passos" id="passos-android" role="tabpanel" aria-labelledby="aba-android">
-      <li>Abra esta página no Chrome.</li>
-      <li>Toque em <strong>⋮</strong> (os três pontinhos, no alto).</li>
-      <li>Toque em <strong>“Adicionar à tela inicial”</strong>.</li>
-    </ol>
-    <ol class="so-passos" id="passos-iphone" role="tabpanel" aria-labelledby="aba-iphone" hidden>
-      <li>Abra esta página no Safari.</li>
-      <li>Toque em <strong>Compartilhar</strong> (o quadrado com a seta para cima).</li>
-      <li>Toque em <strong>“Adicionar à Tela de Início”</strong>.</li>
-    </ol>
-  </section>
+  </div>
 
   <div id="suporte"></div>
 </main>
+
+<!-- Painel "Salvar na tela do celular" (abre de baixo para cima) -->
+<div class="folha" id="folha" hidden>
+  <div class="folha__fundo" data-fechar></div>
+  <section class="folha__painel" id="folha-painel" role="dialog" aria-modal="true" aria-labelledby="folha-titulo" tabindex="-1">
+    <div class="folha__alca" aria-hidden="true"></div>
+    <h2 class="folha__titulo" id="folha-titulo">Salvar na tela do celular</h2>
+    <p class="folha__sub" id="folha-sub"></p>
+    <div class="carrossel" aria-roledescription="carrossel" aria-label="Passos">
+      <ol class="carrossel__trilho" id="trilho"></ol>
+    </div>
+    <div class="carrossel__nav">
+      <button type="button" class="carrossel__seta" id="anterior" aria-label="Passo anterior"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5.2c-2.3 2.2-4.5 4.5-6.7 6.8 2.2 2.3 4.4 4.6 6.6 6.8"/></svg></button>
+      <div class="bolinhas" id="bolinhas" aria-hidden="true"></div>
+      <button type="button" class="carrossel__seta" id="proximo" aria-label="Próximo passo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5.2c2.3 2.2 4.5 4.5 6.7 6.8-2.2 2.3-4.4 4.6-6.6 6.8"/></svg></button>
+    </div>
+    <p class="folha__passo" id="folha-passo" aria-live="polite"></p>
+    <button type="button" class="folha__trocar" id="trocar-so"></button>
+    <button type="button" class="btn btn--pri btn--largo" id="entendi">Entendi</button>
+  </section>
+</div>
 
 <footer class="rodape rodape--acesso">
   <div class="wrap"><p>Material de apoio. Não substitui contador, DP ou advogado.</p></div>

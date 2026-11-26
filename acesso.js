@@ -16,7 +16,7 @@ window.ACESSO = {
   assuntoSuporte: 'Ajuda com o Mapa Fácil da Escala 5x2',
   mensagemSuporte: 'Olá! Comprei o Mapa Fácil da Escala 5x2 e preciso de ajuda.',
 
-  calculadora: '../#inicio',
+  calculadora: 'https://mapafaciltriux.vercel.app/#inicio',
 
   arquivos: {
     guia: '../arquivos/mapa-facil-escala-5x2.pdf',

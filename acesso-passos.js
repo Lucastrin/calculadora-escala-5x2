@@ -1,9 +1,13 @@
-/* Passos ilustrados de "Deixe na tela do celular" (Android e iPhone).
-   Cada passo tem o texto e um desenho simples da tela, com o lugar de tocar em amarelo. */
+/* Passos ilustrados de "Salvar na tela do celular" (Android e iPhone), usados no carrossel do painel.
+   Cada passo tem o texto e um desenho simples da tela, com o lugar de tocar em amarelo.
+   O endereço nos desenhos vem de location.hostname, então acompanha o domínio onde a página estiver. */
 (() => {
   'use strict';
   const M = '#15294C', P = '#FFFDF6', C = '#F3E7CB', A = '#FFD23F', L = '#B5DE3A', T = 'rgba(21,41,76,.22)';
   const ICONE = '../icones/icone-180.png';
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const HOST = esc(location.hostname || 'seu-endereco');
+  const TAM_HOST = Math.min(13, Math.round(190 / (HOST.length * 0.56)));
   const tela = (miolo) => `<svg class="passo__desenho" viewBox="0 0 300 120" role="presentation" aria-hidden="true" font-family="Nunito, system-ui, sans-serif">
     <rect x="2" y="2" width="296" height="116" rx="18" fill="${P}" stroke="${M}" stroke-width="2"/>${miolo}</svg>`;
   const txt = (x, y, s, o = {}) => `<text x="${x}" y="${y}" font-size="${o.t || 14}" font-weight="${o.p || 700}" fill="${o.c || M}" text-anchor="${o.a || 'start'}">${s}</text>`;
@@ -11,7 +15,7 @@
   const seta = (x, y) => `<path d="M${x + 34} ${y + 30}c-8-6-15-14-22-23M${x + 12} ${y + 7}c.5 4 .6 7 .4 10M${x + 12} ${y + 7}c3.8.6 7.2 1.6 10 3" fill="none" stroke="${M}" stroke-width="2.4" stroke-linecap="round"/>`;
   const barraEndereco = (y) => `<rect x="16" y="${y}" width="228" height="32" rx="16" fill="${C}"/>
     <path d="M32 ${y + 13}h7v9h-7zM33.5 ${y + 13}v-3a2 2 0 0 1 4 0v3" fill="none" stroke="${M}" stroke-width="1.6"/>
-    ${txt(46, y + 21, 'lucastrin.github.io', { t: 13, p: 600 })}`;
+    ${txt(46, y + 21, HOST, { t: TAM_HOST, p: 600 })}`;
   const linhas = (y) => `<path d="M24 ${y}h150M24 ${y + 14}h210M24 ${y + 28}h120" stroke="${T}" stroke-width="7" stroke-linecap="round"/>`;
   const telaInicial = tela(`
     ${[0, 1, 2, 3].map((i) => `<rect x="${38 + i * 60}" y="18" width="44" height="44" rx="11" fill="${C}"/>`).join('')}
@@ -65,7 +69,7 @@
           <path d="M150 20v4M150 60v4M128 42h4M168 42h4" stroke="${M}" stroke-width="2" stroke-linecap="round"/>
           <path d="M161 31l-7 15-15 7 7-15z" fill="${A}" stroke="${M}" stroke-width="2" stroke-linejoin="round"/>
           <rect x="36" y="78" width="228" height="30" rx="15" fill="${C}"/>
-          ${txt(150, 98, 'lucastrin.github.io', { t: 13, p: 600, a: 'middle' })}`)
+          ${txt(150, 98, HOST, { t: TAM_HOST, p: 600, a: 'middle' })}`)
       },
       {
         texto: 'Toque em <strong>Compartilhar</strong> (o quadrado com a seta para cima). No iPhone mais novo, ele fica dentro do <strong>⋯</strong>.',
@@ -101,13 +105,5 @@
     ]
   };
 
-  for (const [so, passos] of Object.entries(PASSOS)) {
-    const ol = document.getElementById(`passos-${so}`);
-    if (!ol) continue;
-    ol.innerHTML = passos.map((p, i) => `<li class="passo">
-      <span class="passo__num" aria-hidden="true">${i + 1}</span>
-      <p class="passo__texto">${p.texto}</p>
-      ${p.desenho}
-    </li>`).join('');
-  }
+  window.PASSOS_TELA = PASSOS;
 })();
