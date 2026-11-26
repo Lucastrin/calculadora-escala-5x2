@@ -29,9 +29,15 @@
 .so-abas { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
 .so-abas [role="tab"] { min-height: 48px; font-weight: 800; font-size: 16px; cursor: pointer; background: var(--papel); border: 2px solid var(--marinho); border-radius: var(--r-sm); }
 .so-abas [role="tab"][aria-selected="true"] { background: var(--marinho); color: var(--creme); }
-.so-passos { list-style: decimal; padding-left: 22px; display: grid; gap: var(--s-2); font-size: 17px; }
+.so-passos { list-style: decimal; padding-left: 22px; display: grid; gap: var(--s-3); font-size: 17px; }
+.so-passos:has(.passo) { list-style: none; padding-left: 0; }
+.passo { display: grid; grid-template-columns: 36px 1fr; gap: var(--s-2) var(--s-3); align-items: start; background: var(--papel); border: 2px solid var(--marinho); border-radius: var(--r-mao); padding: var(--s-3); }
+.passo__num { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--limao); border: 2px solid var(--marinho); font-family: var(--titulo); font-weight: 800; font-size: 19px; line-height: 1; }
+.passo__texto { font-size: 17px; line-height: 1.4; padding-top: 5px; }
+.passo__desenho { grid-column: 1 / -1; display: block; width: 100%; max-width: 340px; height: auto; justify-self: center; }
+@media (min-width: 760px) { .so-passos:has(.passo) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .btn--largo { width: 100%; min-height: 56px; font-size: 18px; }
-.btn[hidden], .tela-inicial[hidden] { display: none; }
+.btn[hidden], .tela-inicial[hidden], .so-passos[hidden] { display: none; }
 .instalado { font-weight: 800; color: var(--marinho); }
 .so-ou { font-size: 16px; margin-bottom: 0; }
 .suporte__email { margin: 8px 0 0; text-align: center; font-size: 16px; overflow-wrap: anywhere; }
